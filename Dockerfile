@@ -8,4 +8,4 @@ RUN npm ci
 COPY src/worker ./src/worker
 COPY src/guard ./src/guard
 
-CMD ["npm", "run", "worker"]
+CMD ["node", "--import", "tsx", "src/worker/index.ts"]
