@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { isPreprodBech32Address } from "./bech32";
 
 // This schema checks the Mandate's shape. CIP-8 verification is a separate step.
 export const MandateSchema = z.strictObject({
   v: z.literal(1),
   network: z.literal("cardano:preprod"),
-  payer: z.string().regex(/^addr_test1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$/),
+  payer: z.string().refine(isPreprodBech32Address, "Invalid lowercase addr_test bech32 address"),
   payee: z.string().min(1),
   asset: z.string().regex(/^(?:lovelace|[0-9a-fA-F]{56}\.[0-9a-fA-F]{0,64})$/),
   amount: z.string().regex(/^[1-9][0-9]*$/),

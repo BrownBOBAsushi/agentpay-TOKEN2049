@@ -7,10 +7,20 @@ test("parses a Mandate through the public API", () => {
   expect(guard.MandateSchema.safeParse(fixture).success).toBe(true);
 });
 
+test("accepts a valid Cardano bech32 payer longer than 90 characters", () => {
+  // Fixed vector computed independently with Python BIP-173 polymod.
+  const payer = `addr_test1${"q".repeat(92)}0uk53y`;
+  expect(guard.parseMandate({ ...fixture, payer }).payer).toBe(payer);
+});
+
 test.each([
   ["wrong version", { v: 2 }],
   ["mainnet payer", { payer: "addr1vqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" }],
   ["empty payer payload", { payer: "addr_test1" }],
+  ["changed payer checksum", { payer: `${fixture.payer.slice(0, -1)}q` }],
+  ["short payer checksum", { payer: "addr_test1q" }],
+  ["mixed-case payer", { payer: `Addr${fixture.payer.slice(4)}` }],
+  ["uppercase payer", { payer: fixture.payer.toUpperCase() }],
   ["invalid payer alphabet", { payer: "addr_test1invalid!" }],
   ["mainnet network", { network: "cardano:mainnet" }],
   ["empty payee", { payee: "" }],
