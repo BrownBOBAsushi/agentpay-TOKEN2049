@@ -92,7 +92,7 @@ export default function MandatePage() {
       <fieldset disabled={busy} className={styles.form}>
         <legend className="sr-only">Write and sign a Mandate</legend>
         <section className={styles.wallet} aria-labelledby="wallet-heading">
-          <h2 id="wallet-heading">Wallet</h2>
+          <h2 id="wallet-heading">Teller’s note</h2>
           {!ready ? <p>Checking installed wallets…</p> : providers.length === 0 ? <p>{NO_WALLET}</p> : <>
             <label htmlFor="wallet-provider">Installed wallet</label>
             <select id="wallet-provider" value={selected} onChange={(event) => { setSelected(event.target.value as WalletName); setWallet(null); setBundle(null); setCopyStatus(""); setMessage(""); }}>
@@ -104,7 +104,7 @@ export default function MandatePage() {
           <p>Payer: <span className="value">{wallet?.payer ?? "No wallet connected"}</span></p>
           <FieldError field="payer" errors={errors} />
         </section>
-        <Cheque heading={<h1>Sign a Mandate</h1>} patternDigest={validation.mandate ? pattern : null} edit={<>
+        <Cheque heading={<h1>Sign a Mandate</h1>} patternDigest={validation.mandate ? pattern : null} stubMandate={validation.mandate} signed={!!bundle} edit={<>
           <div className="cheque-fields">
             <div className="payee-line ruled-field">
               <label className="field-label" htmlFor="payee">Pay to the order of</label>
@@ -147,11 +147,11 @@ export default function MandatePage() {
           </div>
           <div className="micr-line">{validation.mandate && pattern ? <><span>Mandate digest:</span><span className="value">{pattern}</span></>
             : <span>{onlyPayerMissing ? "Connect a wallet to draw the safety pattern — your address is part of the Mandate." : "Complete valid fields to draw the safety pattern."}</span>}</div>
-          <div className={styles.actions}>
-            <button type="submit" disabled={!validation.mandate || !wallet}>Sign Mandate</button>
-            {bundle && <><button type="button" onClick={copy}>Copy bundle</button><button type="button" onClick={download}>Download bundle.json</button></>}
-          </div>
         </>} />
+        <div className={styles.actions}>
+          <button type="submit" disabled={!validation.mandate || !wallet}>Sign Mandate</button>
+          {bundle && <><button type="button" onClick={copy}>Copy bundle</button><button type="button" onClick={download}>Download bundle.json</button></>}
+        </div>
       </fieldset>
     </form>
     <p role="status" className={styles.status}>{message}</p><p role="status">{copyStatus}</p>

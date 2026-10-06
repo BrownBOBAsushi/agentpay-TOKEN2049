@@ -9,12 +9,12 @@ export function PencilRing() {
     <path pathLength="1" filter={`url(#${id})`} d="M300 50C300 22 230 0 150 0C68 0 0 22 0 50C0 78 68 100 150 100C230 100 300 78 300 50Z" />
   </svg>;
 }
-export function ReturnItem({ reasons }: { reasons: string[] }) {
-  return <aside className="return-item value" aria-label="Return Item">
+export function ReturnItem({ reasons, children, title = "RETURN ITEM · AgentPay Guard · Guard Check", label = "Return Item", className = "" }: { reasons: string[]; children?: ReactNode; title?: string; label?: string; className?: string }) {
+  return <aside className={`return-item value ${className}`} aria-label={label}>
     <svg className="paper-clip" viewBox="0 0 36 90" aria-hidden="true"><path d="M12 70V18C12 1 32 1 32 18V73C32 93 3 93 3 73V24C3 11 23 11 23 24V67C23 77 12 77 12 67" /><path className="clip-highlight" d="M13 69V18C13 3 31 3 31 18V73" /></svg>
-    <p>RETURN ITEM · AgentPay Guard · Guard Check</p><p>Reason: REFER TO MAKER</p>
-    <p className="return-reasons">{reasons.join(" · ")}</p>
-    <p>This payment was not signed by its human. A new Mandate is required.</p>
+    <p>{title}</p>{children ?? <><p>Reason: REFER TO MAKER</p>
+      <p className="return-reasons">{reasons.join(" · ")}</p>
+      <p>This payment was not signed by its human. A new Mandate is required.</p></>}
   </aside>;
 }
 export function LandingScene({ signed, presented, reasons }: { signed: ReactNode; presented: ReactNode; reasons: string[] }) {
