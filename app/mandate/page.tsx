@@ -8,7 +8,7 @@ import { CopySignature } from "../../src/web/CopySignature";
 import { mandateDigest } from "../../src/guard/digest";
 import type { MandateBundle } from "../../src/guard/bundle";
 import { groupAtomic } from "../../src/web/amount";
-import { connectWallet, installedWallets, newNonce, signMandate, validateDraft, NO_WALLET,
+import { connectWallet, installedWallets, newNonce, signMandate, validateDraft, assertFutureExpiry, NO_WALLET,
   type ConnectedWallet, type Draft, type FieldErrors, type WalletName, type WalletWindow } from "../../src/web/mandate-wallet";
 import styles from "./mandate.module.css";
 
@@ -29,12 +29,17 @@ export default function MandatePage() {
   const [bundle, setBundle] = useState<MandateBundle | null>(null);
   const [copyStatus, setCopyStatus] = useState("");
   const [pattern, setPattern] = useState<string | null>(null);
-  const validation = useMemo(() => validateDraft(draft, wallet?.payer ?? "", tusdmUnit), [draft, wallet]);
+  const [nowSec, setNowSec] = useState<number>();
+  const validation = useMemo(() => validateDraft(draft, wallet?.payer ?? "", tusdmUnit, nowSec), [draft, wallet, nowSec]);
 
   function refreshWallets() {
     const installed = installedWallets(window as WalletWindow);
     setProviders(installed); setSelected(installed[0] ?? ""); setWallet(null); setBundle(null); setCopyStatus(""); setMessage(""); setReady(true);
   }
+  useEffect(() => {
+    const timer = setInterval(() => setNowSec(Date.now() / 1000), 1000);
+    return () => clearInterval(timer);
+  }, []);
   useEffect(() => {
     // Browser extension discovery and randomness run after hydration, never on the server.
     const timer = setTimeout(() => { refreshWallets(); setDraft((value) => ({ ...value, nonce: newNonce() })); }, 0);
@@ -61,6 +66,7 @@ export default function MandatePage() {
     setBusy(true); setMessage("Review the signing request in your wallet."); setBundle(null); setCopyStatus("");
     try {
       const signed = await signMandate(wallet, validation.mandate);
+      assertFutureExpiry(signed.mandate.expiry);
       setBundle(signed); setPattern(signed.digest); setMessage("Mandate signed. Signature verified in this browser.");
     }
     catch (error) { setMessage((error as Error).message); }

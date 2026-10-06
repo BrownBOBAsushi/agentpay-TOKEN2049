@@ -1,5 +1,5 @@
 import { Address, CBOR, COSE, PrivateKey } from "@evolution-sdk/evolution";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import fixture from "../guard/fixtures/bundle.valid.json";
@@ -9,11 +9,12 @@ import { jcs } from "../guard/jcs";
 import { parseMandate } from "../guard/mandate";
 import { atomicToDecimal, decimalToAtomic } from "./amount";
 import { connectWallet, installedWallets, signMandate, expiryUtc, newNonce, validateDraft,
-  NO_WALLET, WRONG_NETWORK, CANCELLED, type WalletApi, type WalletWindow, type Draft } from "./mandate-wallet";
+  NO_WALLET, WRONG_NETWORK, CANCELLED, EXPIRY_NOT_FUTURE, type WalletApi, type WalletWindow, type Draft } from "./mandate-wallet";
 import MandatePage from "../../app/mandate/page";
 import { Stamp } from "./Stamp";
 
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => vi.spyOn(Date, "now").mockReturnValue((fixture.mandate.expiry - 60) * 1000));
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const mandate = parseMandate(fixture.mandate);
 const addressHex = Address.toHex(Address.fromBech32(fixture.payerAddress));
 const draft: Draft = { payee: mandate.payee, amount: atomicToDecimal(mandate.amount), asset: "tADA",
@@ -130,4 +131,28 @@ test("form has labelled standard controls and no success mark before verificatio
   expect(html).not.toContain('aria-label="SIGNED"'); expect(html).not.toContain("Copy bundle");
   const mark = renderToStaticMarkup(createElement(Stamp, { variant: "signed" }));
   expect(mark).toContain('aria-label="SIGNED"'); expect(mark).toContain("<circle"); expect(mark).not.toContain("<animate");
+});
+
+test.each([0, 1])("expiry at or before now (%s seconds past) is a validation error and never calls signData", async (secondsPast) => {
+  vi.mocked(Date.now).mockReturnValue((mandate.expiry + secondsPast) * 1000);
+  expect(validateDraft(draft, mandate.payer)).toEqual({ errors: { expiry: EXPIRY_NOT_FUTURE } });
+  const { api, source } = fakeWallet();
+  await expect(signMandate(await connectWallet(source, "lace"), mandate)).rejects.toThrow(EXPIRY_NOT_FUTURE);
+  expect(api.signData).not.toHaveBeenCalled();
+  expect(verifyMandate(fixture)).toEqual({ ok: true }); // Historical verification is unchanged.
+});
+test("expiry passing while signData is pending never returns a success bundle", async () => {
+  let resolve!: (value: { signature: string; key: string }) => void;
+  const { api, source } = fakeWallet({ signData: vi.fn(() => new Promise<{ signature: string; key: string }>((done) => { resolve = done; })) });
+  const result = signMandate(await connectWallet(source, "lace"), mandate);
+  await vi.waitFor(() => expect(api.signData).toHaveBeenCalledOnce());
+  vi.mocked(Date.now).mockReturnValue(mandate.expiry * 1000);
+  resolve({ signature: fixture.coseSign1, key: fixture.coseKey });
+  await expect(result).rejects.toThrow(EXPIRY_NOT_FUTURE);
+});
+test("expiry passing during the network check prevents the wallet popup", async () => {
+  const { api, source } = fakeWallet(); const wallet = await connectWallet(source, "lace");
+  vi.mocked(api.getNetworkId).mockImplementation(async () => { vi.mocked(Date.now).mockReturnValue(mandate.expiry * 1000); return 0; });
+  await expect(signMandate(wallet, mandate)).rejects.toThrow(EXPIRY_NOT_FUTURE);
+  expect(api.signData).not.toHaveBeenCalled();
 });

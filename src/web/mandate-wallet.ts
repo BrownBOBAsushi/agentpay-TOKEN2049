@@ -19,6 +19,11 @@ export type FieldErrors = Partial<Record<keyof Draft | "payer", string>>;
 export const NO_WALLET = "Install Lace or Eternl to sign";
 export const WRONG_NETWORK = "Switch your wallet to a testnet (preprod)";
 export const CANCELLED = "Signing cancelled";
+export const EXPIRY_NOT_FUTURE = "Void after must be in the future (UTC)";
+
+export function assertFutureExpiry(expiry: number) {
+  if (expiry <= Date.now() / 1000) throw new Error(EXPIRY_NOT_FUTURE);
+}
 
 export function installedWallets(source: WalletWindow): WalletName[] {
   return (["lace", "eternl"] as const).filter((name) => typeof source.cardano?.[name]?.enable === "function");
@@ -35,11 +40,12 @@ export function expiryUtc(value: string): number {
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 16) !== value) throw new Error("Enter a valid date and time in UTC.");
   return date.getTime() / 1000;
 }
-export function validateDraft(draft: Draft, payer: string, tusdmUnit?: string): { mandate?: Mandate; errors: FieldErrors } {
+export function validateDraft(draft: Draft, payer: string, tusdmUnit?: string, nowSec = Date.now() / 1000): { mandate?: Mandate; errors: FieldErrors } {
   const errors: FieldErrors = {};
   let amount = ""; let expiry = NaN;
   try { amount = decimalToAtomic(draft.amount); } catch { errors.amount = "Enter an amount greater than zero, with up to 6 decimal places."; }
   try { expiry = expiryUtc(draft.expiry); } catch { errors.expiry = "Enter a valid date and time in UTC."; }
+  if (expiry <= nowSec) errors.expiry = EXPIRY_NOT_FUTURE;
   const messages: FieldErrors = {
     payer: "Connect a testnet wallet with a payment key address.", payee: "Enter a preprod payee address (addr_test1…) or a Masumi agent identifier.",
     amount: "Enter an amount greater than zero, with up to 6 decimal places.", asset: "tUSDM is unavailable on this page. Choose tADA.",
@@ -86,7 +92,9 @@ export async function signMandate(wallet: ConnectedWallet, input: Mandate): Prom
   try { network = await wallet.api.getNetworkId(); } catch { throw new Error(CANCELLED); }
   if (network !== 0) throw new Error(WRONG_NETWORK);
   let result: { signature: string; key: string };
-  try { result = await wallet.api.signData(wallet.addressHex, bytesToHex(new TextEncoder().encode(jcs(mandate)))); }
+  const payload = bytesToHex(new TextEncoder().encode(jcs(mandate)));
+  assertFutureExpiry(mandate.expiry);
+  try { result = await wallet.api.signData(wallet.addressHex, payload); }
   catch { throw new Error(CANCELLED); }
   const bundle: MandateBundle = { mandate, coseSign1: result?.signature, coseKey: result?.key, payerAddress: wallet.payer, digest: mandateDigest(mandate) };
   const verified = verifyMandate(bundle);
@@ -108,5 +116,6 @@ export async function signMandate(wallet: ConnectedWallet, input: Mandate): Prom
     };
     throw new Error(`${verified.reason}: ${explanation[verified.reason]}`);
   }
+  assertFutureExpiry(mandate.expiry);
   return bundle;
 }
