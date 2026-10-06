@@ -9,9 +9,13 @@ import { atomicToDecimal, groupAtomic } from "./amount";
 function MicrSeparator() {
   return <svg className="micr-separator" viewBox="0 0 20 24" aria-hidden="true"><path d="M3 3v18M9 6h8M9 12h8M9 18h8" /></svg>;
 }
-function FieldValue({ signed, proposed, detail }: { signed: string; proposed?: string; detail?: string }) {
+function FieldValue({ signed, proposed, detail, pencilRings = false }: { signed: string; proposed?: string; detail?: string; pencilRings?: boolean }) {
   return proposed && proposed !== signed ? <span className="field-diff">
-    <span className="presented-value"><span className="change-mark">MUST NOT</span><del className="value">{proposed}</del>{detail && <span className="value asset">{detail}</span>}</span>
+    <span className="change-mark">MUST NOT</span>
+    <span className={pencilRings ? "presented-value ring-target" : "presented-value"}>
+      <del className="value">{proposed}</del>{detail && <span className="value asset">{detail}</span>}
+      {pencilRings && <PencilRing />}
+    </span>
     <span className="signed-annotation">signed: <span className="value">{signed}</span></span>
   </span> : <><span className="value">{signed}</span>{detail && <span className="value asset">{detail}</span>}</>;
 }
@@ -42,8 +46,8 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
       <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className="value">{presented?.network ?? m.network}</span></div>
       {heading}
       <div className="cheque-fields">
-        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} />{props.pencilRings && <PencilRing />}</div>
-        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} />{props.pencilRings && <PencilRing />}</div>
+        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} pencilRings={props.pencilRings} /></div>
+        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} pencilRings={props.pencilRings} /></div>
         {stamp && <div className="stamp-placement">{stamp}</div>}
         <div className="memo-line ruled-field"><span className="field-label">Memo</span><span className="value">{m.purpose}</span></div>
         <div className="expiry-line ruled-field"><span className="field-label">Void after</span>{expiry ? <time className="value" dateTime={expiry}>{expiry.slice(0, 10)} · {expiry.slice(11, 19)} UTC</time> : <span className="value">{m.expiry} Unix seconds</span>}</div>

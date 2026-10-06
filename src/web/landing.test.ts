@@ -4,6 +4,11 @@ import { landingBundle, landingProposal, landingVerdict, presentedDigest } from 
 import { guardCheck } from "../guard/check";
 import { proposalDigest } from "../guard/receipt";
 import { atomicToDecimal, groupAtomic } from "./amount";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Cheque } from "./Cheque";
+import { LandingScene } from "./LandingScene";
+import { Stamp } from "./Stamp";
 
 test("guilloche is deterministic and reacts to one changed digest byte", () => {
   const digest = landingBundle.digest;
@@ -38,4 +43,25 @@ test("landing refusal is a cryptographic Guard Check with the two real differenc
   expect(guardCheck({ bundle: landingBundle, proposal: { ...landingProposal, requirements: {
     ...landingProposal.requirements, payTo: landingBundle.mandate.payee, amount: landingBundle.mandate.amount,
   } } }, { nowSec, nonceUsed: false }).verdict).toBe("APPROVE");
+});
+
+test("server render includes the complete final refusal scene without animation state", () => {
+  const reasons = landingVerdict(landingBundle.mandate.expiry - 3600).reasons;
+  const html = renderToStaticMarkup(createElement(LandingScene, {
+    reasons,
+    signed: createElement(Cheque, { bundle: landingBundle, heading: null }),
+    presented: createElement(Cheque, {
+      bundle: landingBundle,
+      heading: createElement("h3", null, "The presented copy"),
+      pencilRings: true,
+      stamp: createElement(Stamp, { reasons }),
+      presented: { payee: landingProposal.requirements.payTo, amount: landingProposal.requirements.amount },
+    }),
+  }));
+
+  expect(html).toContain("RETURN ITEM");
+  expect(html).toContain('aria-label="RETURNED: PAYEE_MISMATCH, AMOUNT_MISMATCH"');
+  expect(html.match(/class="pencil-ring"/g)).toHaveLength(2);
+  expect(html.match(/<span class="presented-value ring-target">[\s\S]*?<svg class="pencil-ring"/g)).toHaveLength(2);
+  expect(html).not.toContain("data-step=");
 });
