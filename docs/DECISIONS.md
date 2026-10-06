@@ -101,3 +101,12 @@
   nonce row stores the Task ID, so re-running the same Task is not `NONCE_REUSED`.
 - **Why:** A refused attack must not burn the human's Mandate; an approved one must not pay twice.
 - **Status:** Accepted.
+
+## DEC-T12 — Zero digest means "input unavailable"
+- **Date:** 2026-10-06
+- **Decision:** When a Guard Task description cannot be parsed, the REFUSE Guard Receipt sets
+  `mandateDigest` and/or `proposalDigest` to 64 `0` characters. This value means "unavailable",
+  never a computed hash. It is allowed only with verdict `REFUSE`. The Receipt viewer (M3) shows
+  it as "unavailable". The Receipt schema stays `v:1` (no new field).
+- **Why:** T-007 review asked for an honest marker. A sentinel keeps the signed format stable.
+- **Status:** Accepted.
