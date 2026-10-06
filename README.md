@@ -17,7 +17,7 @@ Built at the TOKEN2049 Origins Hackathon (Cardano "Agentic Commerce" track), Sin
 
 ## Run it
 
-Use Node.js 24 or later.
+Use Node.js 24 or later for the web app and local checks.
 
 ```bash
 npm install
@@ -32,6 +32,10 @@ Run the checks and build:
 npm run typecheck && npm run lint && npm test && npm run build
 ```
 
-`npm run worker`, `npm run orchestrator`, and `npm run demo-seller` run empty
-entry files. They exit without taking action. See [CLAUDE.md](CLAUDE.md#commands)
-for every script.
+Run the Guard Worker locally with `npm run worker`. It reads configuration from
+environment variables and `.env.local`. For Railway, set the required variables
+in the service settings; the Docker image does not include env files. The Worker
+image uses Node.js 24 and starts with `npm run worker`.
+
+`npm run orchestrator` and `npm run demo-seller` run empty entry files. They exit
+without taking action. See [CLAUDE.md](CLAUDE.md#commands) for every script.
