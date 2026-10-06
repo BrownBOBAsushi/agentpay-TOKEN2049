@@ -14,7 +14,7 @@ function FieldValue({ signed, proposed, detail, pencilRings = false }: { signed:
     <span className="change-mark">MUST NOT</span>
     <span className={pencilRings ? "presented-value ring-target" : "presented-value"}>
       <del className="value">{proposed}</del>
-      {pencilRings && <PencilRing />}
+      {pencilRings && <PencilRing fit />}
     </span>
     {detail && <span className="value asset">{detail}</span>}
     <span className="signed-annotation">signed: <span className="value">{signed}</span></span>
@@ -24,17 +24,18 @@ function FieldValue({ signed, proposed, detail, pencilRings = false }: { signed:
 type ReadChequeProps = {
   bundle: MandateBundle; heading: ReactNode; presented?: { payee: string; amount: string; asset?: string; network?: string };
   patternDigest?: string; stamp?: ReactNode; actions?: ReactNode; signatureNote?: string; tilt?: number; pencilRings?: boolean;
+  ringFields?: string[]; otherDiffs?: { field: string; signed: string; proposed: string }[];
 };
-type EditChequeProps = { edit: ReactNode; heading: ReactNode; patternDigest: string | null };
+type EditChequeProps = { edit: ReactNode; heading: ReactNode; patternDigest: string | null; stubMandate?: MandateBundle["mandate"]; signed?: boolean };
 
 export function Cheque(props: ReadChequeProps | EditChequeProps) {
-  if ("edit" in props) return <article className="cheque">
+  if ("edit" in props) return <PaperObject mandate={props.stubMandate} tilt={-1.2} signed={props.signed}><article className="cheque">
     <SecurityPaper digest={props.patternDigest} />
     <div className="cheque-content">
       <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className="value">cardano:preprod</span></div>
       {props.heading}{props.edit}
     </div>
-  </article>;
+  </article></PaperObject>;
   const { bundle, heading, presented, patternDigest = bundle.digest, stamp, actions, signatureNote = "Signed with a test key on Cardano preprod" } = props;
   const m = bundle.mandate;
   const expiryDate = new Date(m.expiry * 1000);
@@ -44,11 +45,11 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
   const cheque = <article className={`cheque${presented ? " cheque-presented" : ""}`}>
     <SecurityPaper digest={patternDigest} presented={!!presented} />
     <div className="cheque-content">
-      <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className="value">{presented?.network ?? m.network}</span></div>
+      <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className={props.pencilRings && props.ringFields?.includes("network") ? "ring-target" : undefined}><span className="value">{presented?.network ?? m.network}</span>{props.pencilRings && props.ringFields?.includes("network") && <PencilRing fit />}</span></div>
       {heading}
       <div className="cheque-fields">
-        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} pencilRings={props.pencilRings} /></div>
-        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} pencilRings={props.pencilRings} /></div>
+        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} pencilRings={props.pencilRings && (props.ringFields?.includes("payee") ?? true)} /></div>
+        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} pencilRings={props.pencilRings && (!props.ringFields || props.ringFields.includes("amount"))} /></div>
         {stamp && <div className="stamp-placement">{stamp}</div>}
         <div className="memo-line ruled-field"><span className="field-label">Memo</span><span className="value">{m.purpose}</span></div>
         <div className="expiry-line ruled-field"><span className="field-label">Void after</span>{expiry ? <time className="value" dateTime={expiry}>{expiry.slice(0, 10)} · {expiry.slice(11, 19)} UTC</time> : <span className="value">{m.expiry} Unix seconds</span>}</div>
@@ -57,6 +58,9 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
           <p className="test-key-note">{signatureNote}</p>
           {!presented && <CopySignature signature={signature} />}
         </div>
+        {props.pencilRings && props.otherDiffs && props.otherDiffs.length > 0 && <dl className="presented-other-diffs">{props.otherDiffs.map((entry, index) => <div key={`${entry.field}-${index}`}>
+          <dt>{entry.field}</dt><dd><span className="ring-target"><del className="value">{entry.proposed}</del><PencilRing fit /></span><span className="signed-annotation">signed: <span className="value">{entry.signed}</span></span></dd>
+        </div>)}</dl>}
         {actions && <nav className="cheque-actions" aria-label="Get started">{actions}</nav>}
       </div>
       <div className="micr-line value"><MicrSeparator /><span>{m.nonce}</span><MicrSeparator /><span title={patternDigest}>{patternDigest.slice(0, 8)}…{patternDigest.slice(-8)}</span><MicrSeparator /><span>{presented?.amount ?? m.amount}</span><MicrSeparator /></div>

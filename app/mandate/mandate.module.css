@@ -1,24 +1,42 @@
-.page { max-width: 1500px; margin: auto; padding: 32px; overflow-wrap: anywhere; }
-.intro { margin: 24px 0; }
-.form { border: 0; padding: 0; margin: 0; min-width: 0; }
+.page { max-width: 1600px; margin: auto; padding: 32px; overflow-wrap: anywhere; color: #c3d1c9; }
+.intro { margin: 20px 0 28px; max-width: 80ch; }
+.form { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .34fr); grid-template-areas: "cheque note"; gap: 32px; align-items: start; }
+.wallet { grid-area: note; padding: 22px; margin: 26px 0 0; display: flex; flex-direction: column; align-items: stretch; gap: 12px; color: #1d3b33; background: #f3f4ef; border: 1px solid #b89b5e; box-shadow: 0 3px 8px #0005, 0 16px 28px #0003; position: relative; }
+.wallet h2 { font-size: 25px; width: 100%; margin: 0; color: #1d3b33; }
+.wallet p { flex-basis: 100%; margin: 0; }
+.wallet .value { color: #1d3b33; }
+.page :global(.paper-object) { grid-area: cheque; min-width: 0; }
+.page :global(.paper-object .cheque) { min-height: 100%; }
 .page :global(.payee-line), .page :global(.amount-box) { align-self: start; }
-.wallet { margin-bottom: 32px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; }
-.wallet h2 { font-size: 28px; width: 100%; margin: 0; }
-.wallet p { flex-basis: 100%; }
-.page input, .page select, .page textarea { font-size: 16px; color: var(--ink); background: var(--paper); border: 1px solid var(--ink-2); border-radius: 0; padding: 10px; min-height: 44px; max-width: 100%; }
+.page input, .page select, .page textarea { font-size: 16px; color: #16303a; background: #f3f4ef; border: 1px solid #4a5f67; border-radius: 0; padding: 10px; min-height: 44px; max-width: 100%; }
 .page select:not(:global(.value)) { font-family: var(--font-prose), sans-serif; }
 .page input, .page textarea { width: 100%; }
 .page textarea { resize: vertical; }
-.page button { padding: 10px 16px; border: 1px solid var(--ink); background: var(--paper); color: var(--ink); min-height: 44px; }
-.page button[type="submit"] { background: var(--ink); color: var(--paper); }
-.page button:disabled { opacity: .65; }
+.page button { padding: 10px 16px; border: 1px solid #16303a; background: #f3f4ef; color: #16303a; min-height: 44px; }
+.page button[type="submit"] { background: #f3f4ef; color: #16303a; border-color: #16303a; }
+.page button:disabled { opacity: .72; }
 .page :focus-visible { outline: 2px solid #e6ede7; outline-offset: 3px; }
-.page :global(.cheque) .error { color: var(--ink-2); }
-.page :global(.cheque) :focus-visible { outline-color: var(--ink); }
-.error { display: block; color: #c3d1c9; font-size: 14px; margin-top: 8px; }
+.wallet :focus-visible { outline-color: #16303a; }
+.page :global(.cheque) .error { color: #4a5f67; }
+.page :global(.cheque) :focus-visible { outline-color: #16303a; }
+.error { display: block; color: #4a5f67; font-size: 14px; margin-top: 8px; }
 .error:empty { display: none; }
-.nonce { margin-top: 32px; }
+.nonce { margin-top: 24px; padding-inline: 22px; }
 .nonce input { width: min(100%, 440px); margin: 0 16px 8px 0; }
-.actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 24px; }
-.status { margin: 24px 0 12px; }
-@media (max-width: 760px) { .page { padding: 20px 16px; } }
+.signAction { display: flex; margin-top: 20px; }
+.actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; padding-inline: 0; grid-column: 1; grid-row: 2; justify-self: start; }
+.status { margin: 24px 0 12px; color: #e6ede7; }
+.page > p:last-child { max-width: 88ch; }
+.page :global(.stub-signed) { display: inline-block; align-self: flex-start; width: 62px; transform: rotate(-5deg); }
+.page :global(.stub-signed .stamp-cleared) { width: 62px; fill: #16303a; }
+.page :global(.stamp-cleared) { fill: #16303a; }
+@media (max-width: 900px) {
+  .form { grid-template-columns: minmax(0, 1fr); grid-template-areas: "note" "cheque"; }
+  .wallet { margin-top: 0; }
+  .page :global(.paper-object) { width: 100%; }
+  .actions { grid-column: 1; grid-row: auto; }
+}
+@media (max-width: 760px) {
+  .page { padding: 20px 16px; }
+  .nonce, .actions { padding-inline: 8px; }
+}
