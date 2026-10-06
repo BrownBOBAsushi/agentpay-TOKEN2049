@@ -11,7 +11,7 @@ export type GuardTaskInput = {
 
 export async function runGuardTask(input: GuardTaskInput): Promise<string> {
   let verdict: Verdict = { verdict: "REFUSE", reasons: ["PROPOSAL_INVALID"], diff: [] };
-  // No valid input exists on a parse failure; these digests mark unavailable inputs.
+  // DEC-T12: 64 zeroes mean "unavailable", not a computed hash; used only with REFUSE.
   let mandateHash = "0".repeat(64);
   let proposalHash = "0".repeat(64);
   let taskInput: { mandateBundle: unknown; proposal: unknown } | undefined;

@@ -126,6 +126,19 @@ test("second task using an approved Mandate is refused", async () => {
   expect(verifyReceipt(signed, address)).toBe(true);
 });
 
+test("zero digests mean unavailable only on REFUSE, never APPROVE", async () => {
+  const zero = "0".repeat(64);
+  const approved = JSON.parse(await runGuardTask({ taskId: "task-a", description, nowSec, store, guardKey })).receipt;
+  expect(approved.verdict).toBe("APPROVE");
+  expect(approved.mandateDigest).not.toBe(zero);
+  expect(approved.proposalDigest).not.toBe(zero);
+  for (const invalid of ["not JSON", "null", "{}", JSON.stringify({ mandateBundle: {}, proposal })]) {
+    const refused = JSON.parse(await runGuardTask({ taskId: "task-b", description: invalid, nowSec, store, guardKey })).receipt;
+    expect([refused.mandateDigest, refused.proposalDigest]).toContain(zero);
+    expect(refused.verdict).toBe("REFUSE");
+  }
+});
+
 test.each(["not JSON", "null", "{}"])("malformed description returns a signed refusal: %s", async (description) => {
   const signed = JSON.parse(await runGuardTask({ taskId: "task-a", description, nowSec, store, guardKey }));
   expect(signed.receipt.reasons).toEqual(["PROPOSAL_INVALID"]);
