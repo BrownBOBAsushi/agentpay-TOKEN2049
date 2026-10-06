@@ -7,6 +7,19 @@ export type VerifyResult =
   | { ok: true }
   | { ok: false; reason: "SIG_INVALID" | "SIGNER_MISMATCH" | "DIGEST_MISMATCH" | "BUNDLE_INVALID" };
 
+export function isValidCoseKey(key: Uint8Array): boolean {
+  try {
+    const decodedKey = CBOR.fromCBORBytes(key);
+    if (!(decodedKey instanceof Map)) return false;
+    const publicKey = decodedKey.get(-2n);
+    // COSE: kty=OKP, alg=EdDSA, crv=Ed25519, x=32 bytes, no private d.
+    return decodedKey.get(1n) === 1n && decodedKey.get(3n) === -8n && decodedKey.get(-1n) === 6n
+      && publicKey instanceof Uint8Array && publicKey.length === 32 && !decodedKey.has(-4n);
+  } catch {
+    return false;
+  }
+}
+
 export function verifyMandate(input: unknown): VerifyResult {
   let failureReason: Extract<VerifyResult, { ok: false }>["reason"] = "BUNDLE_INVALID";
   try {
@@ -28,14 +41,7 @@ export function verifyMandate(input: unknown): VerifyResult {
     failureReason = "SIG_INVALID";
     const signature = Buffer.from(bundle.coseSign1, "hex");
     const key = Buffer.from(bundle.coseKey, "hex");
-    const decodedKey = CBOR.fromCBORBytes(key);
-    if (!(decodedKey instanceof Map)) return { ok: false, reason: "SIG_INVALID" };
-    const publicKey = decodedKey.get(-2n);
-    // COSE: kty=OKP, alg=EdDSA, crv=Ed25519, x=32 bytes, no private d.
-    if (decodedKey.get(1n) !== 1n || decodedKey.get(3n) !== -8n || decodedKey.get(-1n) !== 6n
-      || !(publicKey instanceof Uint8Array) || publicKey.length !== 32 || decodedKey.has(-4n)) {
-      return { ok: false, reason: "SIG_INVALID" };
-    }
+    if (!isValidCoseKey(key)) return { ok: false, reason: "SIG_INVALID" };
 
     const sign1 = CBOR.fromCBORBytes(signature);
     if (!Array.isArray(sign1) || sign1.length !== 4 || !(sign1[0] instanceof Uint8Array)
