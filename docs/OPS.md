@@ -81,6 +81,59 @@ Files in `.env.local` must end with a newline — an append once merged two line
 - Only a Claude running inside herdr (`HERDR_ENV=1`) may control panes. The Claude desktop
   session cannot.
 
+## Runbook — move MPS + Worker to Railway (T-009)
+
+Goal: same wallets, same agent, same history, hosted. Never run two MPS on the same wallets.
+`H` = human (secrets, Railway UI). `O` = orch.
+
+**0. Preconditions (O checks):** no paid Task in flight (every `task_journal.stage` is `settled`,
+`complete`, or `failed`); local MPS has no payment in `FundsLocked`/`ResultSubmitted` waiting to collect.
+
+**1. Freeze local (H):** stop the local Worker, then stop local MPS (Ctrl-C in its terminal tab).
+Do not start local MPS again after step 3. Keep `masumi-pg` running for the dump.
+
+**2. Dump (H or O; dumps hold encrypted wallet keys — treat as secrets, 0600, delete after step 3):**
+```bash
+umask 077
+docker exec masumi-pg pg_dump -U masumi -Fc masumi_payment > ~/masumi_payment.dump
+docker exec masumi-pg pg_dump -U masumi -Fc agentpay_guard > ~/agentpay_guard.dump
+```
+
+**3. Restore into Railway Postgres (H; Postgres 16 client to match local 16.15):**
+Take `DATABASE_PUBLIC_URL` from the Railway Postgres → Variables tab (do not paste it in chat).
+```bash
+read -rs PGURL   # paste DATABASE_PUBLIC_URL, Enter
+for db in masumi_payment agentpay_guard; do docker run --rm -e PGURL="$PGURL" postgres:16 sh -c 'psql "$PGURL" -c "create database '$db'"'; done
+docker run --rm -i -e PGURL="$PGURL" postgres:16 sh -c 'pg_restore --no-owner --no-acl -d "${PGURL%/*}/masumi_payment"' < ~/masumi_payment.dump
+docker run --rm -i -e PGURL="$PGURL" postgres:16 sh -c 'pg_restore --no-owner --no-acl -d "${PGURL%/*}/agentpay_guard"' < ~/agentpay_guard.dump
+unset PGURL; rm ~/masumi_payment.dump ~/agentpay_guard.dump
+```
+
+**4. MPS service (H in Railway UI):** source GitHub `masumi-network/masumi-payment-service`, **same commit
+as local (`71455701`)** so the schema matches; builder = its Dockerfile.
+- Variables (copy values from `~/Github/masumi-payment-service/.env`): `DATABASE_URL` (Railway private URL,
+  path `/masumi_payment`), `ENCRYPTION_KEY` (**must be the same** — it decrypts the wallets), `ADMIN_KEY`,
+  `BLOCKFROST_API_KEY_PREPROD`, `AUTO_WITHDRAW_PAYMENTS=true`, `AUTO_WITHDRAW_REFUNDS`,
+  `BLOCK_CONFIRMATIONS_THRESHOLD`, `CHECK_TX_INTERVAL`, `SEED_ONLY_IF_EMPTY=true`.
+- Do **not** set: any `*_MNEMONIC`, any `*_MAINNET*`, `TEST_*`. Do **not** run `prisma:seed`.
+- Pre-deploy command: `pnpm run prisma:migrate` (no-op when schema already matches).
+- Networking → generate a public domain. Then press **Deploy**.
+
+**5. Check MPS (O):** `https://<mps-domain>/api/v1/health` = ok; `GET /wallet/list` (runtime token) shows
+selling wallet `addr_test1qzh3ask7…ct29t8` with `collectionAddress: null`; registry entry still
+`RegistrationConfirmed`; `GET /payment` lists the old payments.
+
+**6. Worker service (H in Railway UI):** "New service" → this repo, branch `main`, builder Dockerfile
+(`railway.json`). Variables (values from repo `.env.local`): `SOKOSUMI_API_URL`, `SOKOSUMI_COWORKER_API_KEY`,
+`SOKOSUMI_COWORKER_ID`, `DATABASE_URL` (private URL, path `/agentpay_guard`), `GUARD_SIGNING_KEY`,
+`GUARD_ADDRESS`, `MPS_BASE_URL=https://<mps-domain>/api/v1` (**https public domain** — the Worker refuses
+non-https non-loopback URLs), `MPS_RUNTIME_TOKEN`, `MASUMI_AGENT_IDENTIFIER`,
+`MASUMI_SUPPORTED_PAYMENT_SOURCE_INDEX=0`, `TUSDM_UNIT`. Leave `PAID_TASKS_ENABLED` unset for the rehearsal.
+No public domain needed (the Worker has no HTTP port). Only **one** Worker replica (advisory lock).
+
+**7. Hosted rehearsal (O):** laptop Worker stopped, create one free S1 Task → Railway Worker completes it →
+record Task ID + Railway log line in EVIDENCE.md; update "Where things run" and "Secrets map" here.
+
 ## Open human tasks
 
 1. Copy mnemonics + MPS `.env` to a password manager, then `rm ~/.masumi-seed-backup.log`.
