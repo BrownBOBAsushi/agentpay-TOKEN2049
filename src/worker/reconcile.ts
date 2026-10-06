@@ -6,15 +6,23 @@ import { createMpsClient, mpsBaseUrl } from "./mps";
 import type { ListedPayment } from "./mps";
 import { createStore } from "./store";
 import { WorkerError } from "./errors";
+import { createWorkerLock } from "./lock";
+import type { WorkerLock } from "./lock";
 
-// Operator-only recovery: stop the Worker and let any in-flight MPS request finish first.
 export async function reconcileTerms(input: {
-  db: Db; taskId: string; payments: (scan: { agentIdentifier: string; termsTimeMs: number }) => AsyncIterable<ListedPayment>;
-}): Promise<"adopted" | "cleared" | "not-pending"> {
+  db: Db; taskId: string; lock: WorkerLock; payments: (scan: { agentIdentifier: string; termsTimeMs: number }) => AsyncIterable<ListedPayment>;
+}): Promise<"adopted" | "cleared" | "not-pending" | "worker-running" | "too-recent"> {
+  if (!await input.lock.tryAcquire()) return "worker-running";
+  try { return await recoverTerms(input); }
+  finally { await input.lock.release(); }
+}
+
+async function recoverTerms(input: Parameters<typeof reconcileTerms>[0]): Promise<"adopted" | "cleared" | "not-pending" | "too-recent"> {
   const { db, taskId } = input;
-  const pending = await db.query<{ stamp: string }>(
-    "SELECT updated_at::text AS stamp FROM side_effect WHERE task_id = $1 AND event_id = '-' AND action = 'terms' AND status = 'pending'", [taskId]);
+  const pending = await db.query<{ stamp: string; recent: boolean }>(
+    "SELECT updated_at::text AS stamp, updated_at > now() - INTERVAL '60 seconds' AS recent FROM side_effect WHERE task_id = $1 AND event_id = '-' AND action = 'terms' AND status = 'pending'", [taskId]);
   if (!pending.rows.length) return "not-pending";
+  if (pending.rows[0].recent) return "too-recent";
   const journal = await createStore(db).readJournal<{ request?: { inputHash?: string; agentIdentifier?: string } }>(taskId);
   const saved = await db.query<{ termsTime: string }>(
     'SELECT updated_at::text AS "termsTime" FROM task_journal WHERE task_id = $1', [taskId]);
@@ -24,7 +32,10 @@ export async function reconcileTerms(input: {
   if (journal?.mode !== "paid" || journal.stage !== "terms" || !inputHash || !agentIdentifier || !Number.isFinite(termsTimeMs)) throw new WorkerError("Missing saved payment request");
   let found: ListedPayment | undefined;
   for await (const payment of input.payments({ agentIdentifier, termsTimeMs })) {
-    if (!payment.metadata?.includes(taskId) || payment.inputHash !== inputHash) continue;
+    let metadata: unknown;
+    try { metadata = JSON.parse(payment.metadata ?? "null"); } catch { continue; }
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)
+      || !("taskId" in metadata) || metadata.taskId !== taskId || payment.inputHash !== inputHash) continue;
     if (found && found.id !== payment.id) throw new WorkerError("Multiple matching payments require manual reconciliation");
     found = payment;
   }
@@ -43,7 +54,7 @@ async function main() {
   const mps = createMpsClient({ baseUrl: mpsBaseUrl(config.MPS_BASE_URL), token: config.MPS_RUNTIME_TOKEN, fetch });
   const db = createPgDb(config.DATABASE_URL);
   try {
-    const outcome = await reconcileTerms({ db, taskId, payments: (scan) => mps.listPayments(scan) });
+    const outcome = await reconcileTerms({ db, taskId, lock: createWorkerLock(config.DATABASE_URL), payments: (scan) => mps.listPayments(scan) });
     console.log(`${taskId} ${outcome}`);
   } finally { await db.close(); }
 }

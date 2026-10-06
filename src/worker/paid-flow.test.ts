@@ -271,7 +271,8 @@ test("an adopted partial-create payment completes the paid flow without a second
   const flow = setup(); flow.setCreateStatus(400);
   await flow.advance();
   await expect(flow.advance()).rejects.toThrow("MPS HTTP 400");
-  expect(await reconcileTerms({ db, taskId: flow.task.id, payments: (scan) => flow.mps.listPayments(scan) })).toBe("adopted");
+  await db.query("UPDATE side_effect SET updated_at = now() - INTERVAL '61 seconds' WHERE status = 'pending'");
+  expect(await reconcileTerms({ db, lock: { tryAcquire: async () => true, release: async () => {} }, taskId: flow.task.id, payments: (scan) => flow.mps.listPayments(scan) })).toBe("adopted");
   for (let i = 0; i < 12; i++) await flow.advance();
   expect(flow.events).toEqual(["RUNNING", "createPayment", "masumiPayment", "submit-result", "COMPLETED"]);
   expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("settled");

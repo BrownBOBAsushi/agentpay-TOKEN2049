@@ -14,6 +14,7 @@ import type { PaidTerms } from "./paid-flow";
 import { createMpsClient } from "./mps";
 import type { MpsClient } from "./mps";
 import { formatWorkerFailure, workerErrorDetail, WorkerError } from "./errors";
+import { createWorkerLock, withWorkerLock } from "./lock";
 
 export function taskMode(journal: { mode: TaskMode } | null, enabled: boolean): TaskMode {
   return journal?.mode ?? (enabled ? "paid" : "free");
@@ -58,20 +59,22 @@ async function main(): Promise<void> {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
   try {
-    await migrate(db);
-    await core.me();
-    while (!stop.signal.aborted) {
-      try {
-        await pollOnce({ db, core, coworkerId: config.coworkerId, guardKey: config.guardKey,
-          paidTasksEnabled: config.paidTasksEnabled, paid: config.paid, mps,
-          nowSec: () => Math.floor(Date.now() / 1000), stopping: () => stop.signal.aborted,
-          log: (stage, taskId, detail) => console.log(`${stage} ${JSON.stringify(taskId)}${detail ? ` ${detail}` : ""}`) });
-      } catch { console.error("poll_failed"); }
-      if (!stop.signal.aborted) {
-        try { await sleep(config.pollIntervalMs, undefined, { signal: stop.signal }); }
-        catch { if (!stop.signal.aborted) throw new Error("Worker sleep failed"); }
+    await withWorkerLock(createWorkerLock(config.databaseUrl), async () => {
+      await migrate(db);
+      await core.me();
+      while (!stop.signal.aborted) {
+        try {
+          await pollOnce({ db, core, coworkerId: config.coworkerId, guardKey: config.guardKey,
+            paidTasksEnabled: config.paidTasksEnabled, paid: config.paid, mps,
+            nowSec: () => Math.floor(Date.now() / 1000), stopping: () => stop.signal.aborted,
+            log: (stage, taskId, detail) => console.log(`${stage} ${JSON.stringify(taskId)}${detail ? ` ${detail}` : ""}`) });
+        } catch { console.error("poll_failed"); }
+        if (!stop.signal.aborted) {
+          try { await sleep(config.pollIntervalMs, undefined, { signal: stop.signal }); }
+          catch { if (!stop.signal.aborted) throw new Error("Worker sleep failed"); }
+        }
       }
-    }
+    });
   } finally {
     process.off("SIGTERM", shutdown);
     process.off("SIGINT", shutdown);
