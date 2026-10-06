@@ -17,4 +17,21 @@ Built at the TOKEN2049 Origins Hackathon (Cardano "Agentic Commerce" track), Sin
 
 ## Run it
 
-Run instructions come with the M0 scaffold. See `docs/PLAN.md`.
+Use Node.js 24 or later.
+
+```bash
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 to see "AgentPay Guard".
+
+Run the checks and build:
+
+```bash
+npm run typecheck && npm run lint && npm test && npm run build
+```
+
+`npm run worker`, `npm run orchestrator`, and `npm run demo-seller` run empty
+entry files. They exit without taking action. See [CLAUDE.md](CLAUDE.md#commands)
+for every script.
