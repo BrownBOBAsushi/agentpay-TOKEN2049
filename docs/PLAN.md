@@ -45,6 +45,10 @@
 - [x] `/mandate`: connect wallet, edit fields, sign, copy bundle. (T-013 merged; real-wallet signing = S3 pending; deploy pending)
 - [x] `/receipt/:id`: Verdict, Diff table, on-chain links (Cardanoscan preprod). (T-012 merged; live receipts verified locally; deploy pending)
 - [x] Landing: one-line promise, 3-step picture, link to Sokosumi listing. (T-011 merged 49da6ff; Sokosumi link waits for NEXT_PUBLIC_SOKOSUMI_LISTING_URL; deploy pending)
+- [x] Visual world: security paper (T-014), teller's desk + landing scroll scene (T-015 merged 91ff0db),
+  receipt + mandate on the desk (T-016 merged 605c99b). Evidence: `docs/tasks/T-015|T-016.design-review.md`
+  (orch browser checks 1440×900 + 390×844), sol APPROVE in `*.review.md`; main 362 tests pass.
+- [ ] Deploy to Vercel (user says "deploy") · design finish review + `DESIGN.md`.
 
 ### M4 — Demo Orchestrator + x402 (h19–h25)
 - [ ] demo-seller: x402-paid route on preprod (template `x402-express`).
