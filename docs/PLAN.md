@@ -33,7 +33,7 @@
 - [ ] CIP-8 verify (S3 done). Test with a real wallet signature fixture.
       T-003 merged: verify + 20 forgery cases green (review 824c842). Real-wallet fixture still open (needs S3).
 - [x] Matcher `x402` + Diff + reason codes. Tests for S1 happy path and S2 injection. (T-004, 116 tests green; review APPROVE b48ac7d)
-- [ ] Guard Receipt sign/verify with Guard Key.
+- [x] Guard Receipt sign/verify with Guard Key. (T-005, 140 tests green; review APPROVE 9b33951)
 
 ### M2 — Worker and paid Task (h8–h14)
 - [ ] Free rehearsal Task: `runtime start` → Guard Check → `runtime complete`.
