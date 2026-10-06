@@ -14,6 +14,32 @@ const requirements = {
 };
 const proposal = { kind: "x402", requirements };
 
+const invalidTimes = [NaN, -Infinity, Infinity, 1.5, -1, Number.MAX_SAFE_INTEGER + 1];
+
+test.each(invalidTimes)("refuses invalid context time %s before all other checks", (invalidTime) => {
+  const context = { nowSec: invalidTime, nonceUsed: false };
+  const expected = { verdict: "REFUSE", reasons: ["CONTEXT_INVALID"], diff: [] };
+  expect(guard.guardCheck({ bundle, proposal }, context)).toEqual(expected);
+  expect(guard.guardCheck({ bundle: null, proposal: null }, context)).toEqual(expected);
+});
+
+test.each([undefined, "false"])("refuses a non-boolean nonceUsed %s", (nonceUsed) => {
+  // Model an untyped caller at the runtime boundary.
+  const context = { nowSec, nonceUsed } as unknown as Parameters<typeof guard.guardCheck>[1];
+  expect(guard.guardCheck({ bundle, proposal }, context))
+    .toEqual({ verdict: "REFUSE", reasons: ["CONTEXT_INVALID"], diff: [] });
+});
+
+test.each(invalidTimes)("direct matcher refuses invalid context time %s", (invalidTime) => {
+  expect(guard.matchX402(guard.parseMandate(bundle.mandate), requirements, invalidTime))
+    .toEqual({ reasons: ["CONTEXT_INVALID"], diff: [] });
+});
+
+test("accepts zero as a valid Unix time", () => {
+  expect(guard.guardCheck({ bundle, proposal }, { nowSec: 0, nonceUsed: false }))
+    .toEqual({ verdict: "APPROVE", reasons: [], diff: [] });
+});
+
 test("S1 approves an exact proposal with its deadline at expiry", () => {
   expect(guard.guardCheck({ bundle, proposal }, { nowSec, nonceUsed: false }))
     .toEqual({ verdict: "APPROVE", reasons: [], diff: [] });

@@ -12,6 +12,10 @@ export function guardCheck(
   input: { bundle: unknown; proposal: unknown },
   context: { nowSec: number; nonceUsed: boolean },
 ): Verdict {
+  if (!Number.isSafeInteger(context?.nowSec) || context.nowSec < 0 || typeof context.nonceUsed !== "boolean") {
+    return refuse("CONTEXT_INVALID");
+  }
+
   const verification = verifyMandate(input.bundle);
   if (!verification.ok) return refuse(verification.reason);
 

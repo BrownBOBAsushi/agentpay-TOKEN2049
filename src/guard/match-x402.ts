@@ -3,6 +3,10 @@ import type { X402Requirements } from "./proposal";
 import type { DiffEntry, ReasonCode, Verdict } from "./verdict";
 
 export function matchX402(mandate: Mandate, requirements: X402Requirements, nowSec: number): Pick<Verdict, "reasons" | "diff"> {
+  if (!Number.isSafeInteger(nowSec) || nowSec < 0) {
+    return { reasons: ["CONTEXT_INVALID"], diff: [] };
+  }
+
   const reasons: ReasonCode[] = [];
   const diff: DiffEntry[] = [];
   const fields: [string, string, string, ReasonCode][] = [
