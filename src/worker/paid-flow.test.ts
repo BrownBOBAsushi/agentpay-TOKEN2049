@@ -28,7 +28,7 @@ beforeAll(async () => { database = new PGlite(); db = { query: (text, params) =>
 beforeEach(async () => { await db.query("TRUNCATE side_effect, mandate_nonce, task_journal"); });
 afterAll(async () => { await database?.close(); });
 
-function setup() {
+function setup(resolveState?: Record<string, unknown>) {
   let nowSec = bundle.mandate.expiry - 600;
   let locked = true;
   let confirmed = true;
@@ -75,6 +75,7 @@ function setup() {
     if (path.endsWith("/submit-result")) { events.push("submit-result"); submittedHash = body.submitResultHash; return Response.json({ status: "success", data: {} }); }
     expect(path).toBe("/api/v1/payment/resolve-blockchain-identifier");
     expect(body).toEqual({ network: "Preprod", blockchainIdentifier: "blockchain-id", includeHistory: "true" });
+    if (resolveState) return Response.json({ status: "success", data: resolveState });
     const state = submittedHash ? "ResultSubmitted" : locked ? "FundsLocked" : "Pending";
     return Response.json({ status: "success", data: { onChainState: state, resultHash: resultMatches ? submittedHash : "other", CurrentTransaction: { status: confirmed ? "Confirmed" : "Pending", newOnChainState: state } } });
   } });
@@ -137,6 +138,15 @@ test("escrow deadline stops without running the Guard Check", async () => {
   expect((await db.query("SELECT * FROM mandate_nonce")).rows).toHaveLength(0);
   expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("failed");
   expect(flow.logs).toContain("payment_deadline_expired");
+});
+
+test("null on-chain state keeps waiting for escrow without running the Guard Check", async () => {
+  const flow = setup({ onChainState: null, resultHash: null, CurrentTransaction: null, TransactionHistory: [], NextAction: "WaitingForExternalAction" });
+  for (let i = 0; i < 6; i++) await expect(flow.advance()).resolves.toBeUndefined();
+  expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("await-escrow");
+  expect(flow.events).toEqual(["RUNNING", "createPayment", "masumiPayment"]);
+  expect((await db.query("SELECT * FROM side_effect WHERE action = 'check'")).rows).toHaveLength(0);
+  expect((await db.query("SELECT * FROM mandate_nonce")).rows).toHaveLength(0);
 });
 
 test("unconfirmed escrow and wrong result hash cannot advance", async () => {
