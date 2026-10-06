@@ -2,7 +2,7 @@ import { isIP } from "node:net";
 import { z } from "zod";
 import { WorkerError } from "./errors";
 
-const listedPaymentSchema = z.object({ id: z.string().min(1), metadata: z.string().nullable(), inputHash: z.string() }).passthrough();
+const listedPaymentSchema = z.object({ id: z.string().min(1), createdAt: z.string().refine((value) => Number.isFinite(Date.parse(value))), metadata: z.string().nullable(), inputHash: z.string() }).passthrough();
 export type ListedPayment = z.infer<typeof listedPaymentSchema>;
 
 export type PaymentRequest = {
@@ -57,23 +57,27 @@ export function createMpsClient(options: { baseUrl: string; token: string; fetch
     return parsed.data.data;
   }
   return {
-    async *listPayments(): AsyncGenerator<ListedPayment> {
+    async *listPayments(scan: { agentIdentifier: string; termsTimeMs: number }): AsyncGenerator<ListedPayment> {
+      const cutoff = scan.termsTimeMs - 600_000;
+      if (!scan.agentIdentifier || !Number.isFinite(cutoff)) throw new WorkerError("Invalid payment scan context");
       let cursor: string | undefined;
       const seen = new Set<string>();
-      for (let page = 0; page < 10_000; page++) {
-        const query = new URLSearchParams({ network: "Preprod", filterPaymentSourceType: "Web3CardanoV2", limit: "100" });
+      for (let page = 0; page < 5; page++) {
+        const query = new URLSearchParams({ network: "Preprod", filterPaymentSourceType: "Web3CardanoV2", filterAgentIdentifier: scan.agentIdentifier, limit: "50" });
         if (cursor) query.set("cursorId", cursor);
         const parsed = z.object({ Payments: z.array(listedPaymentSchema) }).safeParse(await request(`/payment?${query}`));
-        if (!parsed.success) throw new WorkerError("Invalid MPS payment list");
+        if (!parsed.success || parsed.data.Payments.length > 50) throw new WorkerError("Invalid MPS payment list");
         // MPS uses an inclusive cursor: the previous page's last row appears again.
         const payments = parsed.data.Payments;
         const fresh = payments[0]?.id === cursor ? payments.slice(1) : payments;
         if (!fresh.length) return;
         for (const payment of fresh) {
+          if (Date.parse(payment.createdAt) < cutoff) return;
           if (seen.has(payment.id)) throw new WorkerError("MPS payment pagination did not advance");
           seen.add(payment.id);
           yield payment;
         }
+        if (payments.length < 50) return;
         cursor = fresh[fresh.length - 1].id;
       }
       throw new WorkerError("MPS payment pagination limit reached");

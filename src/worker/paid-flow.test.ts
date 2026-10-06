@@ -74,7 +74,7 @@ function setup(resolveState?: Record<string, unknown>, deadlines?: PaidTerms["de
       if (createStatus === 0) throw new DOMException("test-mps-token", "TimeoutError");
       const journal = await createStore(db).readJournal<{ request: Record<string, unknown> }>(task.id);
       expect(journal?.data.request.identifierFromPurchaser).toBe(body.identifierFromPurchaser);
-      payment = alterPayment({ ...body, id: "payment-id", blockchainIdentifier: "blockchain-id", sellerReturnAddress: null,
+      payment = alterPayment({ ...body, id: "payment-id", createdAt: new Date().toISOString(), blockchainIdentifier: "blockchain-id", sellerReturnAddress: null,
         PaymentSource: { network: "Preprod", paymentSourceType: "Web3CardanoV2", smartContractAddress: "escrow", policyId: "policy" },
         SmartContractWallet: { id: "seller", walletVkey: "seller-vkey" } });
       if (createStatus !== 200) return Response.json(sellerReturnError, { status: createStatus });
@@ -271,7 +271,7 @@ test("an adopted partial-create payment completes the paid flow without a second
   const flow = setup(); flow.setCreateStatus(400);
   await flow.advance();
   await expect(flow.advance()).rejects.toThrow("MPS HTTP 400");
-  expect(await reconcileTerms({ db, taskId: flow.task.id, payments: () => flow.mps.listPayments() })).toBe("adopted");
+  expect(await reconcileTerms({ db, taskId: flow.task.id, payments: (scan) => flow.mps.listPayments(scan) })).toBe("adopted");
   for (let i = 0; i < 12; i++) await flow.advance();
   expect(flow.events).toEqual(["RUNNING", "createPayment", "masumiPayment", "submit-result", "COMPLETED"]);
   expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("settled");
