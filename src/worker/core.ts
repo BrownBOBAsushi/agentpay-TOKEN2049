@@ -43,6 +43,7 @@ export function createCoreClient(options: { origin: string; apiKey: string; fetc
     }
   }
   return {
+    request,
     async me(): Promise<unknown> { return parseResponse(z.object({ data: z.unknown() }), await request("/v1/coworkers/me")).data; },
     async listReadyTasks(coworkerId: string): Promise<CoreTask[]> {
       const tasks: CoreTask[] = [];
