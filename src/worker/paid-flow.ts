@@ -51,7 +51,7 @@ function purchasePayload(raw: unknown, request: PaymentRequest) {
 
 const transactionSchema = z.object({ status: z.string(), newOnChainState: z.string() });
 function confirmed(raw: unknown, state: string, resultHash?: string): boolean {
-  const parsed = z.object({ onChainState: z.string(), resultHash: z.string().nullable().optional(),
+  const parsed = z.object({ onChainState: z.string().nullable(), resultHash: z.string().nullable().optional(),
     CurrentTransaction: transactionSchema.nullable().optional(), TransactionHistory: z.array(transactionSchema).optional() }).safeParse(raw);
   if (!parsed.success) throw new WorkerError("Invalid MPS state response");
   const p = parsed.data;
