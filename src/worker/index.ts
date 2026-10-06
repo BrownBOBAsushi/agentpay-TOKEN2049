@@ -13,7 +13,8 @@ import { advancePaidTask } from "./paid-flow";
 import type { PaidTerms } from "./paid-flow";
 import { createMpsClient } from "./mps";
 import type { MpsClient } from "./mps";
-import { formatWorkerFailure, WorkerError } from "./errors";
+import { formatWorkerFailure, workerErrorDetail, WorkerError } from "./errors";
+import { createWorkerLock, withWorkerLock } from "./lock";
 
 export function taskMode(journal: { mode: TaskMode } | null, enabled: boolean): TaskMode {
   return journal?.mode ?? (enabled ? "paid" : "free");
@@ -21,7 +22,7 @@ export function taskMode(journal: { mode: TaskMode } | null, enabled: boolean): 
 
 export async function pollOnce(input: {
   db: Db; core: CoreClient; coworkerId: string; guardKey: { privateKeyHex: string; address: string };
-  nowSec: () => number; stopping: () => boolean; log: (stage: string, taskId: string) => void;
+  nowSec: () => number; stopping: () => boolean; log: (stage: string, taskId: string, detail?: string) => void;
   paidTasksEnabled?: boolean; paid?: PaidTerms; mps?: MpsClient;
 }): Promise<void> {
   const store = createStore(input.db);
@@ -44,7 +45,7 @@ export async function pollOnce(input: {
       } else {
         await runFreeFlow({ task, core: input.core, store, guardKey: input.guardKey, nowSec: input.nowSec(), log: input.log });
       }
-    } catch { input.log("blocked", task.id); }
+    } catch (error) { input.log("blocked", task.id, workerErrorDetail(error)); }
   }
 }
 
@@ -58,20 +59,22 @@ async function main(): Promise<void> {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
   try {
-    await migrate(db);
-    await core.me();
-    while (!stop.signal.aborted) {
-      try {
-        await pollOnce({ db, core, coworkerId: config.coworkerId, guardKey: config.guardKey,
-          paidTasksEnabled: config.paidTasksEnabled, paid: config.paid, mps,
-          nowSec: () => Math.floor(Date.now() / 1000), stopping: () => stop.signal.aborted,
-          log: (stage, taskId) => console.log(`${stage} ${JSON.stringify(taskId)}`) });
-      } catch { console.error("poll_failed"); }
-      if (!stop.signal.aborted) {
-        try { await sleep(config.pollIntervalMs, undefined, { signal: stop.signal }); }
-        catch { if (!stop.signal.aborted) throw new Error("Worker sleep failed"); }
+    await withWorkerLock(createWorkerLock(config.databaseUrl), async () => {
+      await migrate(db);
+      await core.me();
+      while (!stop.signal.aborted) {
+        try {
+          await pollOnce({ db, core, coworkerId: config.coworkerId, guardKey: config.guardKey,
+            paidTasksEnabled: config.paidTasksEnabled, paid: config.paid, mps,
+            nowSec: () => Math.floor(Date.now() / 1000), stopping: () => stop.signal.aborted,
+            log: (stage, taskId, detail) => console.log(`${stage} ${JSON.stringify(taskId)}${detail ? ` ${detail}` : ""}`) });
+        } catch { console.error("poll_failed"); }
+        if (!stop.signal.aborted) {
+          try { await sleep(config.pollIntervalMs, undefined, { signal: stop.signal }); }
+          catch { if (!stop.signal.aborted) throw new Error("Worker sleep failed"); }
+        }
       }
-    }
+    });
   } finally {
     process.off("SIGTERM", shutdown);
     process.off("SIGINT", shutdown);

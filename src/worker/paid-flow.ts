@@ -6,7 +6,8 @@ import { runGuardTask } from "./guard-task";
 import type { GuardTaskInput } from "./guard-task";
 import type { MpsClient, PaymentRequest } from "./mps";
 
-export type PaidTerms = { agentIdentifier: string; supportedPaymentSourceIndex: number; tusdmUnit: string };
+export type PaidTerms = { agentIdentifier: string; supportedPaymentSourceIndex: number; tusdmUnit: string;
+  deadlines?: { payBy: number; submitResult: number; unlock: number; dispute: number } };
 type PaidState = {
   description: string; request?: PaymentRequest; payment?: unknown;
   result?: string; resultHash?: string; settlement?: { settled: boolean; txHash?: string | null }; failure?: string;
@@ -50,11 +51,13 @@ function purchasePayload(raw: unknown, request: PaymentRequest) {
 }
 
 const transactionSchema = z.object({ status: z.string(), newOnChainState: z.string() });
-function confirmed(raw: unknown, state: string, resultHash?: string): boolean {
+function resolveState(raw: unknown) {
   const parsed = z.object({ onChainState: z.string().nullable(), resultHash: z.string().nullable().optional(),
     CurrentTransaction: transactionSchema.nullable().optional(), TransactionHistory: z.array(transactionSchema).optional() }).safeParse(raw);
   if (!parsed.success) throw new WorkerError("Invalid MPS state response");
-  const p = parsed.data;
+  return parsed.data;
+}
+function confirmed(p: ReturnType<typeof resolveState>, state: string, resultHash?: string): boolean {
   return p.onChainState === state && (resultHash === undefined || p.resultHash === resultHash)
     && [p.CurrentTransaction, ...(p.TransactionHistory ?? [])].some((tx) => tx?.status === "Confirmed" && tx.newOnChainState === state);
 }
@@ -83,11 +86,12 @@ export async function advancePaidTask(input: {
   if (journal.stage === "start") {
     await store.once(key("start"), async () => { await core.postEvent(task.id, { status: "RUNNING" }); return null; });
     const iso = (minutes: number) => new Date((nowSec + minutes * 60) * 1000).toISOString();
+    const offsets = input.paid.deadlines ?? { payBy: 20, submitResult: 60, unlock: 75, dispute: 90 };
     const request: PaymentRequest = {
       network: "Preprod", agentIdentifier: input.paid.agentIdentifier, paymentSourceType: "Web3CardanoV2",
       supportedPaymentSourceIndex: input.paid.supportedPaymentSourceIndex, inputHash: hash(data.description),
       identifierFromPurchaser: randomBytes(10).toString("hex"), RequestedFunds: [{ amount: "1000000", unit: input.paid.tusdmUnit }],
-      payByTime: iso(5), submitResultTime: iso(20), unlockTime: iso(36), externalDisputeUnlockTime: iso(52), metadata: JSON.stringify({ taskId: task.id }),
+      payByTime: iso(offsets.payBy), submitResultTime: iso(offsets.submitResult), unlockTime: iso(offsets.unlock), externalDisputeUnlockTime: iso(offsets.dispute), metadata: JSON.stringify({ taskId: task.id }),
     };
     await save("terms", { request }); return;
   }
@@ -103,8 +107,14 @@ export async function advancePaidTask(input: {
     await save("await-escrow"); return;
   }
   if (journal.stage === "await-escrow") {
-    if (nowSec * 1000 >= deadline(payload.payByTime)) { await fail("payment_deadline_expired"); return; }
-    if (confirmed(await mps.resolve(payload.blockchainIdentifier), "FundsLocked")) await save("check");
+    const state = resolveState(await mps.resolve(payload.blockchainIdentifier));
+    if (state.onChainState && ["FundsOrDatumInvalid", "Withdrawn", "RefundWithdrawn", "DisputedWithdrawn"].includes(state.onChainState)) {
+      await fail(state.onChainState); return;
+    }
+    if (state.onChainState === null && nowSec * 1000 >= deadline(payload.payByTime) + 600_000) {
+      await fail("payment_deadline_expired"); return;
+    }
+    if (confirmed(state, "FundsLocked")) await save("check");
     return;
   }
   if (journal.stage === "check") {
@@ -119,7 +129,7 @@ export async function advancePaidTask(input: {
     await save("await-result"); return;
   }
   if (journal.stage === "await-result") {
-    if (confirmed(await mps.resolve(payload.blockchainIdentifier), "ResultSubmitted", data.resultHash)) await save("complete");
+    if (confirmed(resolveState(await mps.resolve(payload.blockchainIdentifier)), "ResultSubmitted", data.resultHash)) await save("complete");
     return;
   }
   if (journal.stage === "complete") {

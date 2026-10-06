@@ -29,7 +29,21 @@ const paidSchema = z.object({
   MASUMI_AGENT_IDENTIFIER: z.string().min(1),
   MASUMI_SUPPORTED_PAYMENT_SOURCE_INDEX: z.preprocess((value) => value === "" || value === undefined ? undefined : Number(value), z.number().int().nonnegative()),
   TUSDM_UNIT: z.string().refine((value) => value.length >= 56 && value.length <= 120 && value.length % 2 === 0 && !/[^0-9a-fA-F]/.test(value)),
+  PAID_PAY_BY_MINUTES: minutes(20),
+  PAID_SUBMIT_RESULT_MINUTES: minutes(60),
+  PAID_UNLOCK_MINUTES: minutes(75),
+  PAID_DISPUTE_MINUTES: minutes(90),
+}).superRefine((value, ctx) => {
+  const keys = ["PAID_PAY_BY_MINUTES", "PAID_SUBMIT_RESULT_MINUTES", "PAID_UNLOCK_MINUTES", "PAID_DISPUTE_MINUTES"] as const;
+  for (let i = 1; i < keys.length; i++) {
+    if (value[keys[i]] <= value[keys[i - 1]]) ctx.addIssue({ code: "custom", path: [keys[i]], message: "Offsets must increase" });
+  }
 });
+
+function minutes(fallback: number) {
+  return z.preprocess((value) => value === undefined || value === "" ? fallback
+    : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN, z.number().int().positive());
+}
 
 function configError(error: z.ZodError): WorkerError {
   return new WorkerError(`Invalid Worker configuration: ${[...new Set(error.issues.map((issue) => String(issue.path[0])))].join(", ")}`);
@@ -46,7 +60,8 @@ export function loadConfig(env: Record<string, string | undefined>) {
     if (!checked.success) throw configError(checked.error);
     const p = checked.data;
     paid = { baseUrl: mpsBaseUrl(p.MPS_BASE_URL), token: p.MPS_RUNTIME_TOKEN, agentIdentifier: p.MASUMI_AGENT_IDENTIFIER,
-      supportedPaymentSourceIndex: p.MASUMI_SUPPORTED_PAYMENT_SOURCE_INDEX, tusdmUnit: p.TUSDM_UNIT };
+      supportedPaymentSourceIndex: p.MASUMI_SUPPORTED_PAYMENT_SOURCE_INDEX, tusdmUnit: p.TUSDM_UNIT,
+      deadlines: { payBy: p.PAID_PAY_BY_MINUTES, submitResult: p.PAID_SUBMIT_RESULT_MINUTES, unlock: p.PAID_UNLOCK_MINUTES, dispute: p.PAID_DISPUTE_MINUTES } };
   }
   return {
     origin: preprodOrigin(value.SOKOSUMI_API_URL),

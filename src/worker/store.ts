@@ -1,17 +1,18 @@
 import type { Db } from "./db";
+import { WorkerError } from "./errors";
 
 export type SideEffectKey = { taskId: string; eventId: string; action: string };
 export type TaskMode = "free" | "paid";
 export type JournalEntry<T = unknown> = { taskId: string; stage: string; data: T; mode: TaskMode };
 
-export class UncertainSideEffectError extends Error {
+export class UncertainSideEffectError extends WorkerError {
   constructor() {
     super("Side effect is pending; reconcile it before any retry");
     this.name = "UncertainSideEffectError";
   }
 }
 
-export class SafeToRetryError extends Error {
+export class SafeToRetryError extends WorkerError {
   constructor(message = "Failure is known to have caused no side effect") {
     super(message);
     this.name = "SafeToRetryError";

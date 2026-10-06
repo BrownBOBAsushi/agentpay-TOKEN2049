@@ -1,0 +1,7 @@
+{
+  "onChainState": null,
+  "resultHash": null,
+  "NextAction": { "requestedAction": "WaitingForExternalAction" },
+  "CurrentTransaction": null,
+  "TransactionHistory": []
+}
