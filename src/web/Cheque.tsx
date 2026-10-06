@@ -13,9 +13,10 @@ function FieldValue({ signed, proposed, detail, pencilRings = false }: { signed:
   return proposed && proposed !== signed ? <span className="field-diff">
     <span className="change-mark">MUST NOT</span>
     <span className={pencilRings ? "presented-value ring-target" : "presented-value"}>
-      <del className="value">{proposed}</del>{detail && <span className="value asset">{detail}</span>}
+      <del className="value">{proposed}</del>
       {pencilRings && <PencilRing />}
     </span>
+    {detail && <span className="value asset">{detail}</span>}
     <span className="signed-annotation">signed: <span className="value">{signed}</span></span>
   </span> : <><span className="value">{signed}</span>{detail && <span className="value asset">{detail}</span>}</>;
 }

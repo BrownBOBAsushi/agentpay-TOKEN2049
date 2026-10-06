@@ -63,5 +63,6 @@ test("server render includes the complete final refusal scene without animation 
   expect(html).toContain('aria-label="RETURNED: PAYEE_MISMATCH, AMOUNT_MISMATCH"');
   expect(html.match(/class="pencil-ring"/g)).toHaveLength(2);
   expect(html.match(/<span class="presented-value ring-target">[\s\S]*?<svg class="pencil-ring"/g)).toHaveLength(2);
+  expect(html).toMatch(/<span class="presented-value ring-target"><del class="value">9 tADA<\/del><svg class="pencil-ring"[\s\S]*?<\/svg><\/span><span class="value asset">9,000,000 lovelace<\/span>/);
   expect(html).not.toContain("data-step=");
 });
