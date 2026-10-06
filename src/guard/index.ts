@@ -6,3 +6,8 @@ export { MandateBundleSchema } from "./bundle";
 export type { MandateBundle } from "./bundle";
 export { verifyMandate } from "./cip8";
 export type { VerifyResult } from "./cip8";
+export { X402ProposalSchema, SpendProposalSchema } from "./proposal";
+export type { SpendProposal, X402Requirements } from "./proposal";
+export type { ReasonCode, DiffEntry, Verdict } from "./verdict";
+export { matchX402 } from "./match-x402";
+export { guardCheck } from "./check";
