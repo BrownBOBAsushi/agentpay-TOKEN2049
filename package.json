@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
-    "worker": "tsx src/worker/index.ts",
+    "worker": "node --env-file-if-exists=.env.local --import tsx src/worker/index.ts",
     "orchestrator": "tsx src/orchestrator/index.ts",
     "demo-seller": "tsx src/demo-seller/index.ts"
   },
