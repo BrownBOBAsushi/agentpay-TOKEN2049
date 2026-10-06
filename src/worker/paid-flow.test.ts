@@ -8,6 +8,7 @@ import { createCoreClient } from "./core";
 import { createMpsClient } from "./mps";
 import { advancePaidTask } from "./paid-flow";
 import type { PaidTerms } from "./paid-flow";
+import { reconcileTerms } from "./reconcile";
 import { createStore, UncertainSideEffectError } from "./store";
 import { migrate } from "./migrate";
 import { loadConfig } from "./config";
@@ -65,17 +66,18 @@ function setup(resolveState?: Record<string, unknown>, deadlines?: PaidTerms["de
     expect(init?.redirect).toBe("error");
     expect(init?.signal).toBeInstanceOf(AbortSignal);
     const path = new URL(String(input)).pathname;
+    if (init?.method === "GET") return Response.json({ status: "success", data: { Payments: [payment] } });
     const body = JSON.parse(String(init?.body));
     expect(body.network).toBe("Preprod");
     if (path === "/api/v1/payment") {
       events.push("createPayment"); created = body;
       if (createStatus === 0) throw new DOMException("test-mps-token", "TimeoutError");
-      if (createStatus !== 200) return Response.json(sellerReturnError, { status: createStatus });
       const journal = await createStore(db).readJournal<{ request: Record<string, unknown> }>(task.id);
       expect(journal?.data.request.identifierFromPurchaser).toBe(body.identifierFromPurchaser);
-      payment = alterPayment({ ...body, blockchainIdentifier: "blockchain-id", sellerReturnAddress: null,
+      payment = alterPayment({ ...body, id: "payment-id", blockchainIdentifier: "blockchain-id", sellerReturnAddress: null,
         PaymentSource: { network: "Preprod", paymentSourceType: "Web3CardanoV2", smartContractAddress: "escrow", policyId: "policy" },
         SmartContractWallet: { id: "seller", walletVkey: "seller-vkey" } });
+      if (createStatus !== 200) return Response.json(sellerReturnError, { status: createStatus });
       return Response.json({ status: "success", data: payment });
     }
     if (path.endsWith("/submit-result")) { events.push("submit-result"); submittedHash = body.submitResultHash; return Response.json({ status: "success", data: {} }); }
@@ -247,13 +249,13 @@ test.each([400, 500, 401, 0])("create-payment failure %s controls retry and bloc
     paidTasksEnabled: true, paid, mps: flow.mps, log: (stage, id, detail) => lines.push(`${stage} ${id}${detail ? ` ${detail}` : ""}`) });
   await poll(); await poll();
   expect(lines.at(-1)).toBe(status === 0 ? "blocked task-paid WorkerError: MPS transport failed"
-    : `blocked task-paid ${status === 400 ? "SafeToRetryError" : "WorkerError"}: MPS HTTP ${status}: ${sellerReturnError.error.message}`);
+    : `blocked task-paid WorkerError: MPS HTTP ${status}: sellerReturnAddress must be`);
   expect(lines.join("\n")).not.toContain("test-mps-token");
   const rows = (await db.query("SELECT status FROM side_effect WHERE action = 'terms'")).rows;
-  expect(rows).toEqual(status === 400 ? [] : [{ status: "pending" }]);
+  expect(rows).toEqual([{ status: "pending" }]);
   flow.setCreateStatus(200); await poll();
-  expect(flow.events.filter((event) => event === "createPayment")).toHaveLength(status === 400 ? 2 : 1);
-  expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe(status === 400 ? "masumi-payment" : "terms");
+  expect(flow.events.filter((event) => event === "createPayment")).toHaveLength(1);
+  expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("terms");
 });
 
 test("custom deadline offsets are persisted in the payment request", async () => {
@@ -263,6 +265,16 @@ test("custom deadline offsets are persisted in the payment request", async () =>
   for (const [field, minutes] of Object.entries({ payByTime: 25, submitResultTime: 65, unlockTime: 80, externalDisputeUnlockTime: 100 })) {
     expect(Date.parse(created[field] as string)).toBe((bundle.mandate.expiry - 600 + minutes * 60) * 1000);
   }
+});
+
+test("an adopted partial-create payment completes the paid flow without a second create POST", async () => {
+  const flow = setup(); flow.setCreateStatus(400);
+  await flow.advance();
+  await expect(flow.advance()).rejects.toThrow("MPS HTTP 400");
+  expect(await reconcileTerms({ db, taskId: flow.task.id, payments: () => flow.mps.listPayments() })).toBe("adopted");
+  for (let i = 0; i < 12; i++) await flow.advance();
+  expect(flow.events).toEqual(["RUNNING", "createPayment", "masumiPayment", "submit-result", "COMPLETED"]);
+  expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("settled");
 });
 
 test("config errors name only invalid keys and fatal output suppresses raw causes", () => {
