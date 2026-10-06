@@ -13,7 +13,7 @@
 .page input, .page textarea { width: 100%; }
 .page textarea { resize: vertical; }
 .page button { padding: 10px 16px; border: 1px solid #16303a; background: #f3f4ef; color: #16303a; min-height: 44px; }
-.page button[type="submit"] { background: #16303a; color: #f3f4ef; }
+.page button[type="submit"] { background: #f3f4ef; color: #16303a; border-color: #16303a; }
 .page button:disabled { opacity: .72; }
 .page :focus-visible { outline: 2px solid #e6ede7; outline-offset: 3px; }
 .wallet :focus-visible { outline-color: #16303a; }
@@ -23,7 +23,8 @@
 .error:empty { display: none; }
 .nonce { margin-top: 24px; padding-inline: 22px; }
 .nonce input { width: min(100%, 440px); margin: 0 16px 8px 0; }
-.actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 24px; padding-inline: 22px; }
+.signAction { display: flex; margin-top: 20px; }
+.actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; padding-inline: 0; grid-column: 1; grid-row: 2; justify-self: start; }
 .status { margin: 24px 0 12px; color: #e6ede7; }
 .page > p:last-child { max-width: 88ch; }
 .page :global(.stub-signed) { display: inline-block; align-self: flex-start; width: 62px; transform: rotate(-5deg); }
@@ -33,6 +34,7 @@
   .form { grid-template-columns: minmax(0, 1fr); grid-template-areas: "note" "cheque"; }
   .wallet { margin-top: 0; }
   .page :global(.paper-object) { width: 100%; }
+  .actions { grid-column: 1; grid-row: auto; }
 }
 @media (max-width: 760px) {
   .page { padding: 20px 16px; }

@@ -147,9 +147,9 @@ export default function MandatePage() {
           </div>
           <div className="micr-line">{validation.mandate && pattern ? <><span>Mandate digest:</span><span className="value">{pattern}</span></>
             : <span>{onlyPayerMissing ? "Connect a wallet to draw the safety pattern — your address is part of the Mandate." : "Complete valid fields to draw the safety pattern."}</span>}</div>
+          <div className={styles.signAction}><button type="submit" disabled={!validation.mandate || !wallet}>Sign Mandate</button></div>
         </>} />
         <div className={styles.actions}>
-          <button type="submit" disabled={!validation.mandate || !wallet}>Sign Mandate</button>
           {bundle && <><button type="button" onClick={copy}>Copy bundle</button><button type="button" onClick={download}>Download bundle.json</button></>}
         </div>
       </fieldset>

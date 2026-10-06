@@ -14,7 +14,7 @@ function FieldValue({ signed, proposed, detail, pencilRings = false }: { signed:
     <span className="change-mark">MUST NOT</span>
     <span className={pencilRings ? "presented-value ring-target" : "presented-value"}>
       <del className="value">{proposed}</del>
-      {pencilRings && <PencilRing />}
+      {pencilRings && <PencilRing fit />}
     </span>
     {detail && <span className="value asset">{detail}</span>}
     <span className="signed-annotation">signed: <span className="value">{signed}</span></span>
@@ -45,7 +45,7 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
   const cheque = <article className={`cheque${presented ? " cheque-presented" : ""}`}>
     <SecurityPaper digest={patternDigest} presented={!!presented} />
     <div className="cheque-content">
-      <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className={props.pencilRings && props.ringFields?.includes("network") ? "ring-target" : undefined}><span className="value">{presented?.network ?? m.network}</span>{props.pencilRings && props.ringFields?.includes("network") && <PencilRing />}</span></div>
+      <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className={props.pencilRings && props.ringFields?.includes("network") ? "ring-target" : undefined}><span className="value">{presented?.network ?? m.network}</span>{props.pencilRings && props.ringFields?.includes("network") && <PencilRing fit />}</span></div>
       {heading}
       <div className="cheque-fields">
         <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} pencilRings={props.pencilRings && (props.ringFields?.includes("payee") ?? true)} /></div>
@@ -59,7 +59,7 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
           {!presented && <CopySignature signature={signature} />}
         </div>
         {props.pencilRings && props.otherDiffs && props.otherDiffs.length > 0 && <dl className="presented-other-diffs">{props.otherDiffs.map((entry, index) => <div key={`${entry.field}-${index}`}>
-          <dt>{entry.field}</dt><dd><span className="ring-target"><del className="value">{entry.proposed}</del><PencilRing /></span><span className="signed-annotation">signed: <span className="value">{entry.signed}</span></span></dd>
+          <dt>{entry.field}</dt><dd><span className="ring-target"><del className="value">{entry.proposed}</del><PencilRing fit /></span><span className="signed-annotation">signed: <span className="value">{entry.signed}</span></span></dd>
         </div>)}</dl>}
         {actions && <nav className="cheque-actions" aria-label="Get started">{actions}</nav>}
       </div>

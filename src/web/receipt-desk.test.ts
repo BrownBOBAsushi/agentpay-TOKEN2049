@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import { landingBundle, landingProposal, landingVerdict } from "./landing";
 import { ReceiptView } from "./ReceiptView";
+import { fitPencilRing, roundedRingPath } from "./LandingScene";
 import MandatePage from "../../app/mandate/page";
 import type { ReceiptRecord } from "./receipt-types";
 
@@ -52,6 +53,13 @@ test("APPROVE shows CLEARED and reports a paid settlement only when settled", ()
   ], proposal, anchor: { kind: "paid", settled: true, onChainState: "ResultSubmitted", txHash: "c".repeat(64) } });
   expect(html).toContain("CLEARED"); expect(html).toContain("PAID — CLEARED · settled");
   expect(html).toContain(`https://preprod.cardanoscan.io/transaction/${"c".repeat(64)}`);
+  expect(html.match(/View on Cardanoscan \(preprod\)/g)).toHaveLength(1);
+  expect(html.match(/aria-label="Copy Transaction ID"/g)).toHaveLength(1);
+  const slipStart = html.indexOf('aria-label="Guard Check slip"');
+  const ledgerStart = html.indexOf('aria-label="Ledger index card"');
+  expect(slipStart).toBeGreaterThanOrEqual(0);
+  expect(html.slice(slipStart, ledgerStart)).toContain("View on Cardanoscan (preprod)");
+  expect(html.slice(ledgerStart)).not.toContain("View on Cardanoscan (preprod)");
   expect(html).not.toContain("RETURNED"); expect(html).not.toContain("VOID");
   const unsettled = render({ ...base, verdict: "APPROVE", reasons: [], diff: [], proposal,
     anchor: { kind: "paid", settled: false, onChainState: "FundsLocked", txHash: null } });
@@ -71,4 +79,28 @@ test("mandate starts as an editable cheque with a blank stub and teller note", (
   expect(html).toContain("Teller’s note"); expect(html).toContain("Cheque-book stub");
   expect(html).toContain('id="payee"'); expect(html).toContain('id="amount"');
   expect(html).not.toContain("stub-signed"); expect(html).not.toContain('aria-label="SIGNED on cheque stub"');
+});
+
+test("pencil ring geometry follows the local value box and stays inside its padded envelope", () => {
+  const localValue = { left: 14, top: 14, width: 120, height: 36 };
+  const geometry = fitPencilRing(localValue, { left: 0, top: 0, width: 148, height: 64 });
+  expect(geometry).toMatchObject({ left: 0, top: 0, width: 148, height: 64 });
+  // The caller supplies offset metrics, not transformed viewport rectangles, so
+  // paper tilt/scale cannot change the ring's local CSS geometry.
+  const coordinates = geometry.path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+  expect(coordinates.length).toBeGreaterThan(10);
+  for (let index = 0; index < coordinates.length; index += 2) {
+    expect(coordinates[index]).toBeGreaterThanOrEqual(0);
+    expect(coordinates[index]).toBeLessThanOrEqual(geometry.width);
+    expect(coordinates[index + 1]).toBeGreaterThanOrEqual(0);
+    expect(coordinates[index + 1]).toBeLessThanOrEqual(geometry.height);
+  }
+  expect(roundedRingPath(geometry.width, geometry.height)).toBe(geometry.path);
+});
+
+test("Checked amount keeps its human and atomic values in one value cell", () => {
+  const html = render({ ...base, matching: [{
+    field: "amount", signed: landingBundle.mandate.amount, proposed: landingBundle.mandate.amount,
+  }] });
+  expect(html).toMatch(/<span class="[^"]*checkedValue[^"]*"><span class="value">2 tADA<\/span><small class="value [^"]*atomic[^"]*">2,000,000 lovelace<\/small><\/span>/);
 });

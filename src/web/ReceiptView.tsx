@@ -10,8 +10,9 @@ import styles from "./receipt.module.css";
 function DiffValue({ value, asset, struck = false }: { value: string; asset?: string; struck?: boolean }) {
   const isAmount = asset && /^\d+$/.test(value);
   const main = isAmount && asset === "lovelace" ? `${atomicToDecimal(value)} tADA` : value;
+  const valueClass = /^(?:addr|stake)(?:_test)?1/i.test(main) || /^[a-f\d]{40,}$/i.test(main) ? styles.identifier : undefined;
   return <>
-    {struck ? <del className="value">{main}</del> : <span className="value">{main}</span>}
+    {struck ? <del className={valueClass ? `value ${valueClass}` : "value"}>{main}</del> : <span className={valueClass ? `value ${valueClass}` : "value"}>{main}</span>}
     {isAmount && <small className={`value ${styles.atomic}`}>{groupAtomic(value)} {asset}</small>}
   </>;
 }
@@ -40,8 +41,8 @@ function SlipSettlement({ data }: { data: ReceiptRecord }) {
     <p>{settlementLabel(data)}</p>
       {data.anchor.kind === "paid" && <>
         <p>Settlement state: <span className="value">{data.anchor.onChainState ?? "State unavailable"}</span></p>
-      {data.anchor.txHash && <><a href={`https://preprod.cardanoscan.io/transaction/${data.anchor.txHash}`}>Cardanoscan preprod transaction</a><CopyValue label="Transaction ID" value={data.anchor.txHash} /></>}
-    </>}
+        {data.anchor.txHash && <a href={`https://preprod.cardanoscan.io/transaction/${data.anchor.txHash}`}>View on Cardanoscan (preprod)</a>}
+      </>}
   </div>;
 }
 
@@ -100,7 +101,7 @@ export function ReceiptView({ data }: { data: ReceiptPageData }) {
           {data.example && <p>Illustrative example — signature, complete inputs and settlement evidence are unavailable.</p>}
           <p>{data.sentinelOk ? "Zero-digest rule valid" : "Zero-digest rule INVALID — APPROVE cannot use unavailable digests"}</p>
           <div className={styles.checked} aria-label="Checked fields"><h3>Checked</h3>
-            {data.matching.length === 0 ? <p>No matching fields are available.</p> : <ul>{data.matching.map((entry) => <li key={entry.field}><CheckedMark /><span>{entry.field} · matches</span><DiffValue value={entry.signed} asset={entry.field === "amount" ? data.bundle?.mandate.asset : undefined} /></li>)}</ul>}
+            {data.matching.length === 0 ? <p>No matching fields are available.</p> : <ul>{data.matching.map((entry) => <li key={entry.field}><span className={styles.checkedLabel}><CheckedMark /><span>{entry.field} · matches</span></span><span className={styles.checkedValue}><DiffValue value={entry.signed} asset={entry.field === "amount" ? data.bundle?.mandate.asset : undefined} /></span></li>)}</ul>}
           </div>
           <SlipSettlement data={data} />
         </section>
@@ -127,7 +128,7 @@ export function ReceiptView({ data }: { data: ReceiptPageData }) {
           : data.anchor.kind === "free" ? <p>Free rehearsal — no payment</p>
           : data.anchor.kind === "example" ? <p>Settlement evidence unavailable for this example.</p>
           : <><p>Settlement state: <span className="value">{data.anchor.onChainState ?? "State unavailable"}</span></p>
-            {data.anchor.txHash && <><a href={`https://preprod.cardanoscan.io/transaction/${data.anchor.txHash}`}>View transaction on Cardanoscan preprod <span className="value">{data.anchor.txHash}</span></a><CopyValue label="Transaction ID" value={data.anchor.txHash} /></>}</>}
+            {data.anchor.txHash && <>{!(data.receiptValid && data.verdict === "APPROVE") && <a href={`https://preprod.cardanoscan.io/transaction/${data.anchor.txHash}`}>View on Cardanoscan (preprod)</a>}<div className={styles.hashValue}><CopyValue label="Transaction ID" value={data.anchor.txHash} /></div></>}</>}
       </div>
       <div className={styles.digests} aria-label="Receipt digests">{Object.entries(data.digests).map(([name, value]) => <div key={name}>
         <h3>{digestLabels[name as keyof typeof digestLabels]}</h3>{!value || /^0{64}$/.test(value) ? <p>unavailable</p> : <CopyValue label={digestLabels[name as keyof typeof digestLabels]} value={value} />}
