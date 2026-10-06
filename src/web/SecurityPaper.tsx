@@ -58,15 +58,34 @@ export function SecurityPaper({ digest, presented = false }: { digest: string | 
     const content = paper.querySelector(".cheque-content");
     const measure = () => {
       const origin = overlay.getBoundingClientRect();
-      const values = Array.from(paper.querySelectorAll(".value")).flatMap((value) => Array.from(value.getClientRects()).map((rect) => ({
-        x: rect.left - origin.left, y: rect.top - origin.top, width: rect.width, height: rect.height,
-      })));
-      const next = { width: origin.width, height: origin.height, values };
+      // Paper objects rotate, but the ink mask uses untransformed paper coordinates.
+      // Inverse-map all four viewport corners: this conservatively clears the full
+      // value even when that value has its own rotation (for example the stamp).
+      let angle = 0;
+      for (let ancestor: HTMLElement | null = overlay; ancestor; ancestor = ancestor.parentElement) {
+        const transform = getComputedStyle(ancestor).transform;
+        if (transform !== "none") {
+          const matrix = new DOMMatrixReadOnly(transform);
+          angle += Math.atan2(matrix.b, matrix.a);
+        }
+      }
+      const local = (rect: DOMRect) => {
+        const points = [rect.left, rect.right].flatMap((x) => [rect.top, rect.bottom].map((y) => {
+          const dx = x - (origin.left + origin.width / 2);
+          const dy = y - (origin.top + origin.height / 2);
+          return { x: dx * Math.cos(angle) + dy * Math.sin(angle) + overlay.clientWidth / 2,
+            y: -dx * Math.sin(angle) + dy * Math.cos(angle) + overlay.clientHeight / 2 };
+        }));
+        const x = Math.min(...points.map((p) => p.x)), y = Math.min(...points.map((p) => p.y));
+        return { x, y, width: Math.max(...points.map((p) => p.x)) - x, height: Math.max(...points.map((p) => p.y)) - y };
+      };
+      const values = Array.from(paper.querySelectorAll(".value")).flatMap((value) => Array.from(value.getClientRects()).map(local));
+      const next = { width: overlay.clientWidth, height: overlay.clientHeight, values };
       setLayout((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next);
       const target = paper.querySelector(".signature-line, .signature-block .signature-short, .signature-block > p:last-child");
       if (target) {
-        const rect = target.getBoundingClientRect();
-        setSignature({ left: rect.left - origin.left, top: rect.bottom - origin.top - (target.matches(".signature-line") ? 5 : -2), width: rect.width });
+        const rect = local(target.getBoundingClientRect());
+        setSignature({ left: rect.x, top: rect.y + rect.height - (target.matches(".signature-line") ? 5 : -2), width: rect.width });
       }
     };
     const observer = new ResizeObserver(measure); observer.observe(paper);

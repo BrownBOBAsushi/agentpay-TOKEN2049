@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { MandateBundle } from "../guard/bundle";
 import { EngravedSeal, SecurityPaper } from "./SecurityPaper";
+import { PaperObject } from "./PaperObject";
+import { PencilRing } from "./LandingScene";
 import { CopySignature } from "./CopySignature";
 import { atomicToDecimal, groupAtomic } from "./amount";
 
@@ -16,7 +18,7 @@ function FieldValue({ signed, proposed, detail }: { signed: string; proposed?: s
 
 type ReadChequeProps = {
   bundle: MandateBundle; heading: ReactNode; presented?: { payee: string; amount: string; asset?: string; network?: string };
-  patternDigest?: string; stamp?: ReactNode; actions?: ReactNode; signatureNote?: string;
+  patternDigest?: string; stamp?: ReactNode; actions?: ReactNode; signatureNote?: string; tilt?: number; pencilRings?: boolean;
 };
 type EditChequeProps = { edit: ReactNode; heading: ReactNode; patternDigest: string | null };
 
@@ -34,14 +36,14 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
   const expiry = Number.isNaN(expiryDate.getTime()) ? null : expiryDate.toISOString();
   const signature = bundle.coseSign1;
   const humanAmount = (amount: string, asset = m.asset) => asset === "lovelace" ? `${atomicToDecimal(amount)} tADA` : amount;
-  return <article className={`cheque${presented ? " cheque-presented" : ""}`}>
+  const cheque = <article className={`cheque${presented ? " cheque-presented" : ""}`}>
     <SecurityPaper digest={patternDigest} presented={!!presented} />
     <div className="cheque-content">
       <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className="value">{presented?.network ?? m.network}</span></div>
       {heading}
       <div className="cheque-fields">
-        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} /></div>
-        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} /></div>
+        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} />{props.pencilRings && <PencilRing />}</div>
+        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} />{props.pencilRings && <PencilRing />}</div>
         {stamp && <div className="stamp-placement">{stamp}</div>}
         <div className="memo-line ruled-field"><span className="field-label">Memo</span><span className="value">{m.purpose}</span></div>
         <div className="expiry-line ruled-field"><span className="field-label">Void after</span>{expiry ? <time className="value" dateTime={expiry}>{expiry.slice(0, 10)} · {expiry.slice(11, 19)} UTC</time> : <span className="value">{m.expiry} Unix seconds</span>}</div>
@@ -55,4 +57,5 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
       <div className="micr-line value"><MicrSeparator /><span>{m.nonce}</span><MicrSeparator /><span title={patternDigest}>{patternDigest.slice(0, 8)}…{patternDigest.slice(-8)}</span><MicrSeparator /><span>{presented?.amount ?? m.amount}</span><MicrSeparator /></div>
     </div>
   </article>;
+  return props.tilt === undefined ? cheque : <PaperObject mandate={presented ? { ...m, payee: presented.payee, amount: presented.amount } : m} tilt={props.tilt}>{cheque}</PaperObject>;
 }
