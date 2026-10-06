@@ -26,7 +26,7 @@ export default function Home() {
           presented={{ payee: landingProposal.requirements.payTo, amount: landingProposal.requirements.amount }}
           heading={<h3>The presented copy</h3>}
           stamp={<Stamp reasons={verdict.reasons} animate />} />
-        <p className="verdict-note"><span className="refuse-mark">Verdict: {verdict.verdict}</span> The signature binds the signed fields. Changing the Spend Proposal does not change the Mandate.</p>
+        <p className="verdict-note">The signature binds the signed fields. Changing the Spend Proposal does not change the Mandate.</p>
       </section>
 
       <section className="endorsements" aria-labelledby="endorsements-title">
@@ -34,9 +34,8 @@ export default function Home() {
         <ol className="endorsement-list">
           <li><span className="endorsement-number value">1</span><div><h3>Signed by the human’s wallet.</h3><p>The Mandate carries a CIP-8 signature.</p></div></li>
           <li><span className="endorsement-number value">2</span><div><h3>Presented by the agent.</h3><p>An x402 payment becomes the Spend Proposal.</p></div></li>
-          <li><span className="endorsement-number value">3</span><div><h3>Cleared or returned by the Guard.</h3><p>The Guard Receipt hash is anchored on Cardano.</p><a className="proof-link" href="https://preprod.cardanoscan.io/transaction/a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32">Read the real result transaction</a></div></li>
+          <li><span className="endorsement-number value">3</span><div><h3>Cleared or returned by the Guard.</h3><p>The Guard Receipt hash is anchored on Cardano.</p><div className="outcome-marks"><div><Stamp variant="cleared" /><span>matching proposal</span></div><div><Stamp /><span>forged proposal</span></div></div><a className="proof-link" href="https://preprod.cardanoscan.io/transaction/a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32">Read the real result transaction</a></div></li>
         </ol>
-        <div className="cancellation-sample"><Stamp variant="cleared" /><span>Matching Spend Proposal</span></div>
       </section>
     </main>
     <footer><span>Cardano preprod · test funds only</span><nav aria-label="Project links">{repo && <a href={repo}>GitHub</a>}{listing && <a href={listing}>Sokosumi listing</a>}</nav></footer>

@@ -14,7 +14,7 @@ const punches: Record<string, string[]> = {
 export function Stamp({ variant = "returned", reasons = [], animate = false }: {
   variant?: "returned" | "cleared"; reasons?: string[]; animate?: boolean;
 }) {
-  const ref = useRef<SVGSVGElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const spread = useRef<SVGAnimateElement>(null);
   const id = useId().replace(/:/g, "");
   useEffect(() => {
@@ -22,7 +22,6 @@ export function Stamp({ variant = "returned", reasons = [], animate = false }: {
     if (!element || !animate || variant !== "returned") return;
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (motion.matches || !("IntersectionObserver" in window)) return;
-    element.dataset.motion = "ready";
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
         element.dataset.motion = "pressed";
@@ -41,7 +40,8 @@ export function Stamp({ variant = "returned", reasons = [], animate = false }: {
       ? [<circle key={`${index}-${x}-${y}`} cx={12 + index * 36 + x * 6} cy={10 + y * 6} r="1.9" />] : [])))}
   </svg>;
 
-  return <svg ref={ref} className="stamp stamp-returned" viewBox="0 0 460 160" role="img" aria-label={`RETURNED: ${reasons.join(", ")}`}>
+  return <div ref={ref} className="stamp stamp-returned" role="img" aria-label={reasons.length ? `RETURNED: ${reasons.join(", ")}` : "RETURNED"}>
+    <svg className="stamp-box" viewBox="0 0 460 160" preserveAspectRatio="none" aria-hidden="true">
     <defs><filter id={`stamp-${id}`} x="-10%" y="-20%" width="120%" height="140%">
       <feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="2" seed="8" result="grain" />
       <feDisplacementMap in="SourceGraphic" in2="grain" scale="1.4" xChannelSelector="R" yChannelSelector="G" result="imprint" />
@@ -52,8 +52,9 @@ export function Stamp({ variant = "returned", reasons = [], animate = false }: {
     <g filter={`url(#stamp-${id})`}>
       <rect x="8" y="10" width="444" height="140" fill="none" stroke="currentColor" strokeWidth="2" />
       <rect x="14" y="16" width="432" height="128" fill="none" stroke="currentColor" strokeWidth="1" />
-      <text x="230" y="93" textAnchor="middle" className="stamp-word">RETURNED</text>
-      <text x="230" y="125" textAnchor="middle" className="stamp-reasons">{reasons.join(" · ")}</text>
     </g>
-  </svg>;
+    </svg>
+    <svg className="stamp-lettering" viewBox="0 0 460 105" aria-hidden="true"><text x="230" y="82" textAnchor="middle" className="stamp-word" filter={`url(#stamp-${id})`}>RETURNED</text></svg>
+    {reasons.length > 0 && <div className="stamp-reasons value" aria-hidden="true">{reasons.map((reason) => <span key={reason}>{reason}</span>)}</div>}
+  </div>;
 }
