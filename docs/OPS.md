@@ -68,6 +68,15 @@ Files in `.env.local` must end with a newline — an append once merged two line
   project `agentpay-guard-cardano` and keep `public/examples/guard-receipt-refuse.json`
   served at that exact path. Breaking it breaks the on-chain metadata link.
 
+**Guard Worker (T-010)**
+- Only one Worker may run: it holds a Postgres advisory lock. A second one exits with `LockError`.
+- A paid Task stuck with a pending `terms` step: stop the Worker, wait 60 s, then run
+  `npm run worker:reconcile -- <taskId>`. Output `adopted` / `cleared` / `not-pending` /
+  `worker-running` / `too-recent`. Never clear `side_effect` rows by hand while a Worker runs.
+- Paid deadlines default to +20/+60/+75/+90 min (DEC-T13). Local MPS uses 20 confirmations and
+  180 s checks (`.env` from `.env.example`); lowering them is the human's choice.
+- Paid mode: set `PAID_TASKS_ENABLED=true` for the run only (env var on the command line).
+
 **herdr**
 - Only a Claude running inside herdr (`HERDR_ENV=1`) may control panes. The Claude desktop
   session cannot.
