@@ -4,20 +4,21 @@
 > `docs/EVIDENCE.md`. Deadline: 7 Oct 23:59 SGT (submit by 22:00).
 
 ## Where we are
-- **main** = `10a23f8`. 349 tests pass (`npm test`), typecheck/lint/build green.
+- **main** = `91ff0db` (T-015 merged, 7 Oct). 354 tests pass, typecheck/lint/build green.
 - **M0, M1, M2 done.** Guard core (Mandate, CIP-8 verify, x402 matcher, Receipt), Worker (free + paid
   seller flow, idempotency, advisory lock, reconcile), live preprod evidence (rehearsals S1/S2, paid Task
   `01a110bb…` settled, net 1.0 tUSDM), **hosted on Railway** (MPS + Worker + Postgres). All in EVIDENCE.md.
 - **M3 web, merged:** landing (T-011), `/receipt/[id]` (T-012), `/mandate` (T-013), security-paper
   texture (T-014). **Not deployed to Vercel yet.**
-- **T-015 built, not reviewed:** branch `feat/T-015-desk` (impl `4b81080`, build report `57654d3` in
-  `docs/tasks/T-015.build.md`). Next: orch visual check, then sol code review, then merge. Do **not**
-  re-send T-015. Then **T-016** (receipt + mandate on the desk). Cards are in `docs/tasks/`.
+- **T-015 done** (teller's desk + landing scroll scene): 2 fix rounds, orch visual PASS, sol APPROVE.
+  Evidence: `docs/tasks/T-015.design-review.md`, `T-015.review.md`.
+- **User rules (7 Oct):** no deploy until the user says "deploy"; **decline every Codex approval
+  prompt**; never spend paid credit/overage for Claude or Codex (stop if usage runs out).
 
 ## Next steps (in order)
-1. T-015 (already built): orch visual check (build, `next start`, gstack `/browse` screenshots desktop
-   1440×900 + mobile 390×844, one batched design round max) → sol code review → merge.
-2. T-016: same loop.
+1. T-015 done.
+2. T-016: orch visual check (build, `next start`, gstack `/browse` desktop 1440×900 + mobile 390×844)
+   → sol code review → merge.
 3. Local preview for the user (they review before any deploy): `rm -rf .next && npm run build &&
    npx next start --hostname 127.0.0.1 --port 3000` (reads `.env.local`, so live receipts work).
    Links: `/`, `/receipt/01a10ff9-5009-73d6-903e-7a5effdb30d0` (S2 REFUSE),
@@ -57,6 +58,11 @@
 ## Hard-won gotchas
 - Codex sandbox: **no network** (jarvis permission profile). orch installs npm packages and passes them
   in uncommitted `package.json`/lock; orch runs `next start`/browser checks. Builds work in a temp copy.
+- Codex keeps asking approval to start `next dev/start`, `rm -rf .next`, or clean temp dirs. Every
+  prompt to astra/sol must say: "no servers, no approvals, no writes to node_modules or repo `.next`;
+  orch builds and runs browser checks." T-015 staging copies once replaced `node_modules/.bin`
+  symlinks with plain files (`Cannot find module '../server/require-hook'`) — fix: `rm -rf
+  node_modules/.bin && npm rebuild`.
 - herdr: `agent prompt --wait` needs `--until working`; then `agent wait --until idle --until done
   --until blocked`. A Codex question/approval shows as `blocked`; read the pane before answering. While
   Codex is busy, queue a message with `send-text` + `Tab` (Enter does not queue).
