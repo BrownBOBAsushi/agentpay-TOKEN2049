@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Cheque } from "../src/web/Cheque";
+import { LandingScene } from "../src/web/LandingScene";
 import { Stamp } from "../src/web/Stamp";
 import { landingBundle, landingProposal, landingVerdict, presentedDigest } from "../src/web/landing";
 
@@ -12,22 +13,16 @@ export default function Home() {
   return <>
     <a className="skip-link" href="#presented">Skip to the Guard Check</a>
     <main>
-      <section className="opening" aria-label="The signed Mandate">
-        <Cheque bundle={landingBundle}
-          heading={<h1>An agent can only spend<br className="desktop-break" /> what its human signed.</h1>}
-          actions={<><Link className="primary-link" href="/mandate">Sign a Mandate <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 5l7 7-7 7" /></svg></span></Link>
-            <Link className="secondary-link" href="/receipt/01a10ff9-5009-73d6-903e-7a5effdb30d0">Read a real refusal</Link></>} />
+      <section className="opening desk-opening" aria-label="The signed Mandate">
+        <div className="desk-promise"><span className="desk-brand">AgentPay Guard</span><h1>An agent can only spend<br className="desktop-break" /> what its human signed.</h1></div>
+        <div className="opening-paper"><Cheque bundle={landingBundle} tilt={-1.2} heading={null} /></div>
+        <nav className="desk-actions" aria-label="Get started"><Link className="primary-link" href="/mandate">Sign a Mandate</Link><Link className="secondary-link" href="/receipt/01a10ff9-5009-73d6-903e-7a5effdb30d0">Read a real refusal</Link></nav>
       </section>
-
-      <section className="presented-section" id="presented" aria-labelledby="presented-title">
-        <div className="section-intro"><h2 id="presented-title">The agent presents<br />a different cheque.</h2>
-          <p>A changed payee. A higher amount. The Guard Check compares this Spend Proposal with the signed Mandate. The Diff shows what changed.</p></div>
-        <Cheque bundle={landingBundle} patternDigest={presentedDigest}
+      <LandingScene reasons={verdict.reasons}
+        signed={<Cheque bundle={landingBundle} tilt={-1.2} heading={null} />}
+        presented={<Cheque bundle={landingBundle} tilt={2.5} patternDigest={presentedDigest}
           presented={{ payee: landingProposal.requirements.payTo, amount: landingProposal.requirements.amount }}
-          heading={<h3>The presented copy</h3>}
-          stamp={<Stamp reasons={verdict.reasons} animate />} />
-        <p className="verdict-note">The signature binds the signed fields. Changing the Spend Proposal does not change the Mandate.</p>
-      </section>
+          heading={<h3>The presented copy</h3>} pencilRings stamp={<Stamp reasons={verdict.reasons} />} />} />
 
       <section className="endorsements" aria-labelledby="endorsements-title">
         <div className="endorsement-heading"><h2 id="endorsements-title">The back of<br />the cheque.</h2><p>From signed intent to a signed Guard Receipt.</p></div>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import "./globals.css";
+import { Desk } from "../src/web/Desk";
 
 const legends = localFont({ src: "./fonts/MarcellusSC-Regular.ttf", variable: "--font-legends", display: "swap" });
 const prose = localFont({ src: [
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${legends.variable} ${prose.variable} ${values.variable}`}>
-      <body>{children}</body>
+      <body><Desk>{children}</Desk></body>
     </html>
   );
 }

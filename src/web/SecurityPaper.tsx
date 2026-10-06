@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { guillocheWaveStrands, twoInkGuilloche } from "./guilloche";
+import { inverseMapBox } from "./securityGeometry";
 
 const MICROPRINT = "AGENTPAY GUARD · SIGNED INTENT · ";
 
@@ -14,7 +15,7 @@ function Microprint({ className, style }: { className: string; style?: CSSProper
     if (!element) return;
     const measure = () => {
       const phrase = sample.current?.getComputedTextLength() ?? 0;
-      if (phrase > 0) setLength({ count: Math.ceil(element.getBoundingClientRect().width / phrase) + 1, phrase });
+      if (phrase > 0) setLength({ count: Math.ceil(element.clientWidth / phrase) + 1, phrase });
     };
     const observer = new ResizeObserver(measure); observer.observe(element);
     let active = true;
@@ -52,30 +53,51 @@ export function SecurityPaper({ digest, presented = false }: { digest: string | 
   useEffect(() => {
     const overlay = layer.current;
     const paper = overlay?.parentElement;
-    if (!paper || !overlay) return;
+    const svg = overlay?.querySelector<SVGSVGElement>(".security-inks");
+    if (!paper || !overlay || !svg) return;
     // The edit form supplies its own signature field. Measure that field rather
     // than duplicate or change its form markup. This overlay never captures input.
     const content = paper.querySelector(".cheque-content");
     const measure = () => {
-      const origin = overlay.getBoundingClientRect();
-      const values = Array.from(paper.querySelectorAll(".value")).flatMap((value) => Array.from(value.getClientRects()).map((rect) => ({
-        x: rect.left - origin.left, y: rect.top - origin.top, width: rect.width, height: rect.height,
-      })));
-      const next = { width: origin.width, height: origin.height, values };
+      // SVG's screen CTM includes every ancestor transform, its transform origin,
+      // and the responsive scene scale. Inverting it keeps masks in paper-local units.
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return;
+      const local = (rect: DOMRect) => inverseMapBox(rect, matrix);
+      const values = Array.from(paper.querySelectorAll(".value")).flatMap((value) =>
+        Array.from(value.getClientRects()).map(local).filter((rect): rect is NonNullable<typeof rect> => rect !== null));
+      const next = { width: overlay.clientWidth, height: overlay.clientHeight, values };
       setLayout((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next);
       const target = paper.querySelector(".signature-line, .signature-block .signature-short, .signature-block > p:last-child");
       if (target) {
-        const rect = target.getBoundingClientRect();
-        setSignature({ left: rect.left - origin.left, top: rect.bottom - origin.top - (target.matches(".signature-line") ? 5 : -2), width: rect.width });
+        const rect = local(target.getBoundingClientRect());
+        if (rect) setSignature({ left: rect.x, top: rect.y + rect.height - (target.matches(".signature-line") ? 5 : -2), width: rect.width });
       }
     };
     const observer = new ResizeObserver(measure); observer.observe(paper);
     if (content) observer.observe(content);
     const mutations = new MutationObserver(measure);
     if (content) mutations.observe(content, { childList: true, characterData: true, subtree: true });
+    const ancestors: Element[] = [];
+    for (let ancestor: Element | null = paper; ancestor; ancestor = ancestor.parentElement) {
+      ancestors.push(ancestor);
+      mutations.observe(ancestor, { attributes: true, attributeFilter: ["class", "style", "data-step"] });
+      ancestor.addEventListener("transitionend", measure);
+      ancestor.addEventListener("animationend", measure);
+    }
+    window.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("resize", measure);
     let active = true;
     void document.fonts.ready.then(() => { if (active) measure(); });
-    return () => { active = false; observer.disconnect(); mutations.disconnect(); };
+    return () => {
+      active = false; observer.disconnect(); mutations.disconnect();
+      window.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+      ancestors.forEach((ancestor) => {
+        ancestor.removeEventListener("transitionend", measure);
+        ancestor.removeEventListener("animationend", measure);
+      });
+    };
   }, []);
   const size = layout ? Math.min(layout.width * .36, 540) : 0;
   return <div className="security-paper" aria-hidden="true" ref={layer}>

@@ -1,22 +1,29 @@
 import type { ReactNode } from "react";
 import type { MandateBundle } from "../guard/bundle";
 import { EngravedSeal, SecurityPaper } from "./SecurityPaper";
+import { PaperObject } from "./PaperObject";
+import { PencilRing } from "./LandingScene";
 import { CopySignature } from "./CopySignature";
 import { atomicToDecimal, groupAtomic } from "./amount";
 
 function MicrSeparator() {
   return <svg className="micr-separator" viewBox="0 0 20 24" aria-hidden="true"><path d="M3 3v18M9 6h8M9 12h8M9 18h8" /></svg>;
 }
-function FieldValue({ signed, proposed, detail }: { signed: string; proposed?: string; detail?: string }) {
+function FieldValue({ signed, proposed, detail, pencilRings = false }: { signed: string; proposed?: string; detail?: string; pencilRings?: boolean }) {
   return proposed && proposed !== signed ? <span className="field-diff">
-    <span className="presented-value"><span className="change-mark">MUST NOT</span><del className="value">{proposed}</del>{detail && <span className="value asset">{detail}</span>}</span>
+    <span className="change-mark">MUST NOT</span>
+    <span className={pencilRings ? "presented-value ring-target" : "presented-value"}>
+      <del className="value">{proposed}</del>
+      {pencilRings && <PencilRing />}
+    </span>
+    {detail && <span className="value asset">{detail}</span>}
     <span className="signed-annotation">signed: <span className="value">{signed}</span></span>
   </span> : <><span className="value">{signed}</span>{detail && <span className="value asset">{detail}</span>}</>;
 }
 
 type ReadChequeProps = {
   bundle: MandateBundle; heading: ReactNode; presented?: { payee: string; amount: string; asset?: string; network?: string };
-  patternDigest?: string; stamp?: ReactNode; actions?: ReactNode; signatureNote?: string;
+  patternDigest?: string; stamp?: ReactNode; actions?: ReactNode; signatureNote?: string; tilt?: number; pencilRings?: boolean;
 };
 type EditChequeProps = { edit: ReactNode; heading: ReactNode; patternDigest: string | null };
 
@@ -34,14 +41,14 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
   const expiry = Number.isNaN(expiryDate.getTime()) ? null : expiryDate.toISOString();
   const signature = bundle.coseSign1;
   const humanAmount = (amount: string, asset = m.asset) => asset === "lovelace" ? `${atomicToDecimal(amount)} tADA` : amount;
-  return <article className={`cheque${presented ? " cheque-presented" : ""}`}>
+  const cheque = <article className={`cheque${presented ? " cheque-presented" : ""}`}>
     <SecurityPaper digest={patternDigest} presented={!!presented} />
     <div className="cheque-content">
       <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className="value">{presented?.network ?? m.network}</span></div>
       {heading}
       <div className="cheque-fields">
-        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} /></div>
-        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} /></div>
+        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} pencilRings={props.pencilRings} /></div>
+        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} pencilRings={props.pencilRings} /></div>
         {stamp && <div className="stamp-placement">{stamp}</div>}
         <div className="memo-line ruled-field"><span className="field-label">Memo</span><span className="value">{m.purpose}</span></div>
         <div className="expiry-line ruled-field"><span className="field-label">Void after</span>{expiry ? <time className="value" dateTime={expiry}>{expiry.slice(0, 10)} · {expiry.slice(11, 19)} UTC</time> : <span className="value">{m.expiry} Unix seconds</span>}</div>
@@ -55,4 +62,5 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
       <div className="micr-line value"><MicrSeparator /><span>{m.nonce}</span><MicrSeparator /><span title={patternDigest}>{patternDigest.slice(0, 8)}…{patternDigest.slice(-8)}</span><MicrSeparator /><span>{presented?.amount ?? m.amount}</span><MicrSeparator /></div>
     </div>
   </article>;
+  return props.tilt === undefined ? cheque : <PaperObject mandate={presented ? { ...m, payee: presented.payee, amount: presented.amount } : m} tilt={props.tilt}>{cheque}</PaperObject>;
 }

@@ -9,11 +9,13 @@
 .page select:not(:global(.value)) { font-family: var(--font-prose), sans-serif; }
 .page input, .page textarea { width: 100%; }
 .page textarea { resize: vertical; }
-.page button { padding: 10px 16px; border: 1px solid var(--ink); background: var(--paper); min-height: 44px; }
+.page button { padding: 10px 16px; border: 1px solid var(--ink); background: var(--paper); color: var(--ink); min-height: 44px; }
 .page button[type="submit"] { background: var(--ink); color: var(--paper); }
 .page button:disabled { opacity: .65; }
-.page :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-.error { display: block; color: var(--ink-2); font-size: 14px; margin-top: 8px; }
+.page :focus-visible { outline: 2px solid #e6ede7; outline-offset: 3px; }
+.page :global(.cheque) .error { color: var(--ink-2); }
+.page :global(.cheque) :focus-visible { outline-color: var(--ink); }
+.error { display: block; color: #c3d1c9; font-size: 14px; margin-top: 8px; }
 .error:empty { display: none; }
 .nonce { margin-top: 32px; }
 .nonce input { width: min(100%, 440px); margin: 0 16px 8px 0; }
