@@ -50,7 +50,7 @@ function purchasePayload(raw: unknown, request: PaymentRequest) {
   };
 }
 
-const transactionSchema = z.object({ status: z.string(), newOnChainState: z.string() });
+const transactionSchema = z.object({ status: z.string(), newOnChainState: z.string().nullable() });
 function resolveState(raw: unknown) {
   const parsed = z.object({ onChainState: z.string().nullable(), resultHash: z.string().nullable().optional(),
     CurrentTransaction: transactionSchema.nullable().optional(), TransactionHistory: z.array(transactionSchema).optional() }).safeParse(raw);

@@ -1,0 +1,14 @@
+{
+  "onChainState": "FundsLocked",
+  "resultHash": "",
+  "NextAction": { "requestedAction": "SubmitResultInitiated" },
+  "CurrentTransaction": {
+    "status": "Pending",
+    "newOnChainState": null,
+    "previousOnChainState": null,
+    "txHash": "test-submit-result-tx"
+  },
+  "TransactionHistory": [
+    { "status": "Confirmed", "newOnChainState": "FundsLocked", "previousOnChainState": null, "txHash": "test-lock-tx" }
+  ]
+}
