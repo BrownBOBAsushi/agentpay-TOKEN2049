@@ -78,6 +78,7 @@ export default function MandatePage() {
     document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const errors = validation.errors;
+  const onlyPayerMissing = !wallet && Object.keys(errors).length === 1 && !!errors.payer;
   return <main className={styles.page}>
     <Link href="/">AgentPay Guard</Link>
     <p className={styles.intro}>Cardano preprod · test funds only. Set your wallet to preprod. The wallet network ID identifies testnet, but cannot distinguish preprod from preview.</p>
@@ -105,8 +106,9 @@ export default function MandatePage() {
               <FieldError field="payee" errors={errors} />
             </div>
             <div className="amount-box">
-              <label className="field-label" htmlFor="amount">Amount in human units</label>
-              <input className="value" id="amount" type="number" inputMode="decimal" min="0.000001" step="0.000001" value={draft.amount} onChange={(event) => change("amount", event.target.value)} required aria-invalid={!!errors.amount} aria-describedby="amount-error" />
+              <label className="field-label" htmlFor="amount">Amount</label>
+              <input className="value" id="amount" type="number" inputMode="decimal" min="0.000001" step="0.000001" value={draft.amount} onChange={(event) => change("amount", event.target.value)} required aria-invalid={!!errors.amount} aria-describedby="amount-hint amount-error" />
+              <p id="amount-hint">In tADA or tUSDM, up to 6 decimals.</p>
               <FieldError field="amount" errors={errors} />
               <label className="field-label" htmlFor="asset">Asset</label>
               <select className="value" id="asset" value={draft.asset} onChange={(event) => change("asset", event.target.value as Draft["asset"])} aria-invalid={!!errors.asset} aria-describedby="asset-error">
@@ -137,7 +139,8 @@ export default function MandatePage() {
             <input className="value" id="nonce" readOnly value={draft.nonce} aria-describedby="nonce-error" />
             <button type="button" onClick={() => change("nonce", newNonce())}>New nonce</button><FieldError field="nonce" errors={errors} />
           </div>
-          <div className="micr-line value">{validation.mandate && pattern ? <span>Mandate digest: {pattern}</span> : <span>Complete valid fields to draw the safety pattern.</span>}</div>
+          <div className="micr-line">{validation.mandate && pattern ? <><span>Mandate digest:</span><span className="value">{pattern}</span></>
+            : <span>{onlyPayerMissing ? "Connect a wallet to draw the safety pattern — your address is part of the Mandate." : "Complete valid fields to draw the safety pattern."}</span>}</div>
           <div className={styles.actions}>
             <button type="submit" disabled={!validation.mandate || !wallet}>Sign Mandate</button>
             {bundle && <><button type="button" onClick={copy}>Copy bundle</button><button type="button" onClick={download}>Download bundle.json</button></>}

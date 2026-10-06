@@ -1,6 +1,7 @@
 .page { max-width: 1500px; margin: auto; padding: 32px; overflow-wrap: anywhere; }
 .intro { margin: 24px 0; }
 .form { border: 0; padding: 0; margin: 0; min-width: 0; }
+.page :global(.payee-line), .page :global(.amount-box) { align-self: start; }
 .wallet { margin-bottom: 32px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; }
 .wallet h2 { font-size: 28px; width: 100%; margin: 0; }
 .wallet p { flex-basis: 100%; }
