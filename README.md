@@ -33,9 +33,20 @@ npm run typecheck && npm run lint && npm test && npm run build
 ```
 
 Run the Guard Worker locally with `npm run worker`. It reads configuration from
-environment variables and `.env.local`. For Railway, set the required variables
-in the service settings; the Docker image does not include env files. The Worker
-image uses Node.js 24 and starts with `npm run worker`.
+environment variables and `.env.local`. For Railway, set these variables in the
+service settings; the Docker image does not include env files.
+
+- Required base: `SOKOSUMI_API_URL`, `SOKOSUMI_COWORKER_API_KEY`, `SOKOSUMI_COWORKER_ID`,
+  `DATABASE_URL`, `GUARD_SIGNING_KEY`, `GUARD_ADDRESS`.
+- Paid: `MPS_BASE_URL` (use the MPS HTTPS public domain on Railway), `MPS_RUNTIME_TOKEN`,
+  `MASUMI_AGENT_IDENTIFIER`, `MASUMI_SUPPORTED_PAYMENT_SOURCE_INDEX`, `TUSDM_UNIT`,
+  `PAID_TASKS_ENABLED`.
+- Optional: `POLL_INTERVAL_MS`, `PAID_PAY_BY_MINUTES`, `PAID_SUBMIT_RESULT_MINUTES`,
+  `PAID_UNLOCK_MINUTES`, `PAID_DISPUTE_MINUTES`.
+
+Run one Worker replica only; the Worker holds an advisory lock. The image uses
+Node.js 24 and starts with `node --import tsx src/worker/index.ts`.
+Follow [Runbook — move MPS + Worker to Railway](docs/OPS.md#runbook--move-mps--worker-to-railway-t-009).
 
 `npm run orchestrator` and `npm run demo-seller` run empty entry files. They exit
 without taking action. See [CLAUDE.md](CLAUDE.md#commands) for every script.
