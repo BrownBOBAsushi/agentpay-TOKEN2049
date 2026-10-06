@@ -31,6 +31,7 @@
 ### M1 — guard-core (h3–h8)
 - [x] Mandate schema (zod), JCS, digest. Unit tests. (T-002, 41 tests green; review APPROVE 7f97272)
 - [ ] CIP-8 verify (S3 done). Test with a real wallet signature fixture.
+      T-003 merged: verify + 20 forgery cases green (review 824c842). Real-wallet fixture still open (needs S3).
 - [ ] Matcher `x402` + Diff + reason codes. Tests for S1 happy path and S2 injection.
 - [ ] Guard Receipt sign/verify with Guard Key.
 
