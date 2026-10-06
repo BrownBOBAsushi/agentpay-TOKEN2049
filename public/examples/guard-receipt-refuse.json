@@ -1,0 +1,16 @@
+{
+  "kind": "agentpay.guard-receipt",
+  "version": "0.1",
+  "example": true,
+  "verdict": "REFUSE",
+  "reasons": ["PAYEE_MISMATCH", "AMOUNT_MISMATCH"],
+  "diff": [
+    { "field": "payee", "signed": "addr_test1...market-data-agent", "proposed": "addr_test1...attacker" },
+    { "field": "amount", "signed": "1000000", "proposed": "50000000" }
+  ],
+  "asset": "tUSDM",
+  "mandateDigest": "sha256:<digest of the human-signed Mandate>",
+  "proposalDigest": "sha256:<digest of the Spend Proposal>",
+  "signedBy": "AgentPay Guard Key (Ed25519, CIP-8)",
+  "anchoredOnChain": "Masumi submitResultHash"
+}
