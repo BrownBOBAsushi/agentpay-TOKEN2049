@@ -28,7 +28,8 @@ const notFound = (error: unknown) => error instanceof SafeToRetryError && error.
 
 function exampleRecord(): ReceiptRecord {
   return { kind: "receipt", example: true, taskId: "example", ts: null, verdict: "REFUSE", reasons: example.reasons,
-    diff: example.diff, matching: [], signatureValid: false, guardAddress: null,
+    diff: example.diff, matching: [], signatureValid: false, inputsBound: false, sentinelOk: true, receiptValid: false,
+    invalidReasons: ["Illustrative example has no verifiable signature or complete Task inputs."], guardAddress: null,
     digests: { receipt: null, mandate: null, proposal: null }, bundle: null, proposal: null,
     inputs: "unavailable", anchor: { kind: "example" } };
 }
@@ -67,20 +68,45 @@ export async function loadReceipt(id: string, options: {
     const parsed = signedSchema.safeParse(raw);
     if (!parsed.success) return { kind: "not-receipt" };
     const signed = parsed.data;
-    const signatureValid = verifyReceipt(raw, options.guardAddress) && signed.receipt.taskId === id;
+    const signatureValid = verifyReceipt(raw, options.guardAddress);
+    const zero = "0".repeat(64);
+    const sentinelOk = signed.receipt.verdict === "REFUSE"
+      || (signed.receipt.mandateDigest !== zero && signed.receipt.proposalDigest !== zero);
     let bundle: ReceiptRecord["bundle"] = null;
     let proposal: ReceiptRecord["proposal"] = null;
     let inputs: ReceiptRecord["inputs"] = "unavailable";
+    // Match the Worker's unavailable markers only when the corresponding input
+    // really cannot be parsed. Hash the original proposal, including metadata.
+    let expectedMandate = zero;
+    let expectedProposal = zero;
     try {
-      const description = z.object({ mandateBundle: MandateBundleSchema, proposal: SpendProposalSchema }).parse(JSON.parse(task.description ?? ""));
-      if (mandateDigest(description.mandateBundle.mandate) === signed.receipt.mandateDigest
-        && proposalDigest(description.proposal) === signed.receipt.proposalDigest) {
-        bundle = description.mandateBundle; proposal = description.proposal; inputs = "available";
-      } else { inputs = "digest-mismatch"; }
-    } catch { /* Unavailable input must not be filled from another Task or fixture. */ }
+      const description = z.object({
+        mandateBundle: z.unknown().refine((value) => value !== undefined),
+        proposal: z.unknown().refine((value) => value !== undefined),
+      }).parse(JSON.parse(task.description ?? ""));
+      expectedProposal = proposalDigest(description.proposal as Parameters<typeof proposalDigest>[0]);
+      const parsedBundle = MandateBundleSchema.safeParse(description.mandateBundle);
+      const parsedProposal = SpendProposalSchema.safeParse(description.proposal);
+      if (parsedBundle.success) expectedMandate = mandateDigest(parsedBundle.data.mandate);
+      if (parsedBundle.success && parsedProposal.success) {
+        bundle = parsedBundle.data; proposal = parsedProposal.data; inputs = "available";
+      }
+    } catch { /* The unavailable markers must match the actual Task input. */ }
+    const inputsBound = signed.receipt.mandateDigest === expectedMandate
+      && signed.receipt.proposalDigest === expectedProposal
+      && (signed.receipt.verdict === "REFUSE" || (expectedMandate !== zero && expectedProposal !== zero));
+    const taskMatches = signed.receipt.taskId === id;
+    const receiptValid = signatureValid && inputsBound && sentinelOk && taskMatches;
+    const invalidReasons = [
+      ...(!signatureValid ? ["Guard signature INVALID"] : []),
+      ...(!inputsBound ? ["Receipt does NOT match this Task"] : []),
+      ...(!sentinelOk ? ["APPROVE cannot contain an unavailable (zero) digest"] : []),
+      ...(!taskMatches ? ["Receipt Task ID does NOT match this Task"] : []),
+    ];
+    if (!inputsBound) { bundle = null; proposal = null; inputs = "digest-mismatch"; }
     const paid = events.some((event) => event.masumiPayment != null);
-    let settlement: z.infer<typeof anchorSchema>["data"];
-    try { settlement = anchorSchema.parse(await core.request(`/v1/tasks/${encodeURIComponent(id)}/receipt`)).data; }
+    let settlement: z.infer<typeof anchorSchema>["data"] = null;
+    try { if (receiptValid) settlement = anchorSchema.parse(await core.request(`/v1/tasks/${encodeURIComponent(id)}/receipt`)).data; }
     catch (error) { if (!paid && notFound(error)) settlement = null; else throw error; }
     const matching = bundle && proposal ? [
       { field: "network", signed: bundle.mandate.network, proposed: proposal.requirements.network },
@@ -90,7 +116,7 @@ export async function loadReceipt(id: string, options: {
       { field: "amount", signed: bundle.mandate.amount, proposed: proposal.requirements.amount },
     ].filter((field) => field.signed === field.proposed && !signed.receipt.diff.some((diff) => diff.field === field.field)) : [];
     return { kind: "receipt", example: false, taskId: id, ts: signed.receipt.ts, verdict: signed.receipt.verdict,
-      reasons: signed.receipt.reasons, diff: signed.receipt.diff, matching, signatureValid, guardAddress: signed.guardAddress,
+      reasons: signed.receipt.reasons, diff: signed.receipt.diff, matching, signatureValid, inputsBound, sentinelOk, receiptValid, invalidReasons, guardAddress: signed.guardAddress,
       digests: { receipt: receiptDigest(signed.receipt as GuardReceipt), mandate: signed.receipt.mandateDigest, proposal: signed.receipt.proposalDigest },
       bundle, proposal, inputs, anchor: !paid && !settlement?.txHash && !settlement?.settled ? { kind: "free" }
         : { kind: "paid", settled: settlement?.settled ?? false, onChainState: settlement?.onChainState ?? null, txHash: settlement?.txHash ?? null } };

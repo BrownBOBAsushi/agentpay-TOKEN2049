@@ -46,10 +46,10 @@ test("APPROVE renders CLEARED", async () => {
   const proposal = { ...landingProposal, requirements: { ...landingProposal.requirements, payTo: landingBundle.mandate.payee, amount: landingBundle.mandate.amount } };
   const approved = signReceipt({ ...receipt, proposalDigest: proposalDigest(proposal), verdict: "APPROVE", reasons: [], diff: [] }, { privateKeyHex, address });
   const html = await render(fake({ comment: JSON.stringify(approved), description: JSON.stringify({ mandateBundle: landingBundle, proposal }) }));
-  expect(html).toContain("CLEARED"); expect(html).toContain("amount · matches"); expect(html).not.toContain("MUST NOT");
+  expect(html).toContain("CLEARED"); expect(html).not.toContain("VOID"); expect(html).toContain("amount · matches"); expect(html).not.toContain("MUST NOT");
 });
-test("tampered receipt shows Signature INVALID", async () => {
-  expect(await render(fake({ comment: JSON.stringify({ ...signed, digest: "a".repeat(64) }) }))).toContain("Signature INVALID");
+test("tampered receipt shows Guard signature INVALID", async () => {
+  expect(await render(fake({ comment: JSON.stringify({ ...signed, digest: "a".repeat(64) }) }))).toContain("Guard signature INVALID");
 });
 test.each([
   [{ taskStatus: 404 }, "No Guard Receipt for this Task"],
@@ -119,4 +119,57 @@ test("Diff shows human tADA amounts, atomic detail and plain digest labels", asy
   for (const label of ["Receipt digest", "Mandate digest", "Proposal digest"]) {
     expect(html).toContain(label); expect(html).toContain(`Copy ${label}`);
   }
+});
+
+
+test.each(["mandateDigest", "proposalDigest"] as const)("%s mismatch is VOID despite a valid signature", async (field) => {
+  const invalid = signReceipt({ ...receipt, verdict: "APPROVE", reasons: [], diff: [], [field]: "a".repeat(64) }, { privateKeyHex, address });
+  const fetcher = fake({ comment: JSON.stringify(invalid), paid: true, anchor: { settled: true, onChainState: "Settled", txHash: "a".repeat(64) } });
+  const data = await loadReceipt(taskId, { ...options, fetch: fetcher });
+  expect(data).toMatchObject({ signatureValid: true, inputsBound: false, sentinelOk: true, receiptValid: false });
+  const html = renderToStaticMarkup(createElement(ReceiptView, { data }));
+  expect(html).toContain("VOID — not a valid Guard Receipt for this Task");
+  expect(html).toContain("Receipt does NOT match this Task"); expect(html).toContain(invalid.digest);
+  expect(html).not.toContain("CLEARED"); expect(html).not.toContain("RETURNED"); expect(html).not.toContain(">Settled");
+});
+test.each(["mandateDigest", "proposalDigest", "both"])("APPROVE with zero %s is VOID", async (field) => {
+  const invalid = signReceipt({ ...receipt, verdict: "APPROVE", reasons: [], diff: [],
+    ...(field !== "proposalDigest" ? { mandateDigest: "0".repeat(64) } : {}),
+    ...(field !== "mandateDigest" ? { proposalDigest: "0".repeat(64) } : {}) }, { privateKeyHex, address });
+  const fetcher = fake({ comment: JSON.stringify(invalid), description: "unparseable" });
+  const data = await loadReceipt(taskId, { ...options, fetch: fetcher });
+  expect(data).toMatchObject({ signatureValid: true, sentinelOk: false, receiptValid: false });
+  const html = renderToStaticMarkup(createElement(ReceiptView, { data }));
+  expect(html).toContain("VOID"); expect(html).not.toContain("CLEARED");
+});
+test("REFUSE unavailable digests require truly unavailable Task inputs", async () => {
+  const refusal = signReceipt({ ...receipt, mandateDigest: "0".repeat(64), proposalDigest: "0".repeat(64) }, { privateKeyHex, address });
+  const comment = JSON.stringify(refusal);
+  const data = await loadReceipt(taskId, { ...options, fetch: fake({ comment, description: "unparseable" }) });
+  expect(data).toMatchObject({ signatureValid: true, inputsBound: true, sentinelOk: true, receiptValid: true });
+  expect(renderToStaticMarkup(createElement(ReceiptView, { data }))).toContain("RETURNED");
+  const html = await render(fake({ comment })); expect(html).toContain("VOID"); expect(html).not.toContain("RETURNED");
+});
+test("valid REFUSE keeps its stamp and all three validation facts", async () => {
+  const data = await loadReceipt(taskId, { ...options, fetch: fake() });
+  expect(data).toMatchObject({ signatureValid: true, inputsBound: true, sentinelOk: true, receiptValid: true });
+  expect(renderToStaticMarkup(createElement(ReceiptView, { data }))).not.toContain("VOID");
+});
+
+
+test("invalid signature keeps inspection data but suppresses both verdict stamps and settlement", async () => {
+  const html = await render(fake({ comment: JSON.stringify({ ...signed, digest: "a".repeat(64) }),
+    paid: true, anchor: { settled: true, onChainState: "Settled", txHash: "a".repeat(64) } }));
+  expect(html).toContain("Guard signature INVALID"); expect(html).toContain("VOID");
+  expect(html).toContain("Field Diff"); expect(html).toContain(receipt.mandateDigest);
+  expect(html).not.toContain("RETURNED"); expect(html).not.toContain("CLEARED"); expect(html).not.toContain(">Settled");
+});
+test("partial unavailable input binds the remaining original proposal digest", async () => {
+  const refusal = signReceipt({ ...receipt, mandateDigest: "0".repeat(64) }, { privateKeyHex, address });
+  const data = await loadReceipt(taskId, { ...options, fetch: fake({ comment: JSON.stringify(refusal),
+    description: JSON.stringify({ mandateBundle: null, proposal: landingProposal }) }) });
+  expect(data).toMatchObject({ inputsBound: true, sentinelOk: true, receiptValid: true });
+  const mismatch = await loadReceipt(taskId, { ...options, fetch: fake({ comment: JSON.stringify(refusal),
+    description: JSON.stringify({ mandateBundle: null, proposal: { ...landingProposal, extraMetadata: "changed" } }) }) });
+  expect(mismatch).toMatchObject({ inputsBound: false, receiptValid: false });
 });

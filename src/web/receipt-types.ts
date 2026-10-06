@@ -5,7 +5,7 @@ import type { DiffEntry } from "../guard/verdict";
 export type ReceiptRecord = {
   kind: "receipt"; example: boolean; taskId: string; ts: number | null;
   verdict: "APPROVE" | "REFUSE"; reasons: string[]; diff: DiffEntry[]; matching: DiffEntry[];
-  signatureValid: boolean; guardAddress: string | null;
+  signatureValid: boolean; inputsBound: boolean; sentinelOk: boolean; receiptValid: boolean; invalidReasons: string[]; guardAddress: string | null;
   digests: { receipt: string | null; mandate: string | null; proposal: string | null };
   bundle: MandateBundle | null; proposal: SpendProposal | null;
   inputs: "available" | "unavailable" | "digest-mismatch";

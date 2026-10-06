@@ -34,12 +34,27 @@ export function ReceiptView({ data }: { data: ReceiptPageData }) {
       <div><h1>Guard Receipt</h1><p>Task <span className="value">{data.taskId}</span></p>
         {time ? <time className="value" dateTime={time}>{time.replace("T", " ").replace(".000Z", " UTC")}</time> : <p>Time unavailable</p>}
       </div>
-      <Stamp variant={data.verdict === "REFUSE" ? "returned" : "cleared"} reasons={data.reasons} />
+      {data.receiptValid ? <Stamp variant={data.verdict === "REFUSE" ? "returned" : "cleared"} reasons={data.reasons} />
+        : <div className={styles.voidMark}>
+          <svg viewBox="0 0 320 100" role="img" aria-label="VOID">
+            <path d="M5 5H315V95H5ZM12 12H308V88H12Z" fill="none" stroke="currentColor" />
+            <text x="160" y="72" textAnchor="middle">VOID</text>
+          </svg>
+          <p>VOID — not a valid Guard Receipt for this Task</p>
+          <ul>{data.invalidReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+        </div>}
     </header>
     {data.example ? <p>Illustrative example — signature, complete inputs and settlement evidence are unavailable.</p>
       : <p className={data.signatureValid ? undefined : styles.invalid}>{data.signatureValid
         ? <>Guard signature valid — signed by <span className="value">{data.guardAddress}</span></>
-        : "Signature INVALID"}</p>}
+        : "Guard signature INVALID"}</p>}
+    {!data.example && <>
+      <p>{data.inputsBound ? data.inputs === "unavailable"
+        ? "Receipt matches this Task's unavailable inputs (REFUSE exception)"
+        : "Receipt matches this Task's Mandate and proposal" : "Receipt does NOT match this Task"}</p>
+      <p>{data.sentinelOk ? "Zero-digest rule valid" : "Zero-digest rule INVALID — APPROVE cannot use unavailable digests"}</p>
+    </>}
+    {!data.receiptValid && data.reasons.length > 0 && <p>Recorded reason codes: <span className="value">{data.reasons.join(", ")}</span></p>}
     <section aria-labelledby="receipt-diff"><h2 id="receipt-diff">Field Diff</h2>
       {data.diff.length === 0 && <p>No differing fields in this Guard Receipt.</p>}
       {data.diff.map((entry, index) => <div className={styles.diff} key={`${entry.field}-${index}`}>
@@ -56,7 +71,7 @@ export function ReceiptView({ data }: { data: ReceiptPageData }) {
         signatureNote="Original Mandate signature — the presented copy is not signed" />
     </section> : <p>{data.inputs === "digest-mismatch" ? "Task inputs do not match the receipt digests. Cheques are unavailable." : "Complete Mandate and Spend Proposal unavailable."}</p>}
     <section className={styles.anchor} aria-labelledby="anchor"><h2 id="anchor">On-chain anchor</h2>
-      {data.anchor.kind === "free" ? <p>Free rehearsal — no payment</p> : data.anchor.kind === "example" ? <p>Settlement evidence unavailable for this example.</p>
+      {!data.receiptValid ? <p>Settlement is not asserted for a VOID receipt.</p> : data.anchor.kind === "free" ? <p>Free rehearsal — no payment</p> : data.anchor.kind === "example" ? <p>Settlement evidence unavailable for this example.</p>
         : <><p>{data.anchor.settled ? "Settled" : "Not settled"} · <span className="value">{data.anchor.onChainState ?? "State unavailable"}</span></p>
           {data.anchor.txHash && <a href={`https://preprod.cardanoscan.io/transaction/${data.anchor.txHash}`}>View transaction on Cardanoscan preprod <span className="value">{data.anchor.txHash}</span></a>}</>}
     </section>

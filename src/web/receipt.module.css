@@ -29,3 +29,6 @@
 }
 
 .atomic, .diff .atomic:global(.value) { display: block; font-size: 14px; color: var(--ink-2); }
+
+.voidMark { color: var(--ink); }
+.voidMark svg { width: 100%; max-width: 420px; fill: currentColor; font-family: var(--font-legends), serif; font-size: 72px; }

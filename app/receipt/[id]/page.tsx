@@ -7,7 +7,7 @@ type Props = { params: Promise<{ id: string }> };
 export function generateStaticParams() { return [{ id: "example" }]; }
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const data = await getReceipt((await params).id);
-  return { title: `Guard Receipt${data.kind === "receipt" ? ` — ${data.verdict}` : ""} · AgentPay Guard` };
+  return { title: `Guard Receipt${data.kind === "receipt" ? ` — ${data.receiptValid ? data.verdict : "VOID"}` : ""} · AgentPay Guard` };
 }
 export default async function ReceiptPage({ params }: Props) {
   return <ReceiptView data={await getReceipt((await params).id)} />;
