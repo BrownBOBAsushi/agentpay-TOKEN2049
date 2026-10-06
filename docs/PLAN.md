@@ -16,11 +16,16 @@
 ## Milestones
 
 ### M0 — Accounts and slow paths (h0–h3) — start 12:00
-- [ ] Sokosumi preprod account, `sokosumi` CLI, Vendor, private Coworker (`--capability tasks`).
+- [x] Sokosumi preprod account, `sokosumi` CLI, Vendor, private Coworker (`--capability tasks`).
+      Evidence: `docs/EVIDENCE.md` Sokosumi — Vendor `01a10f51-8397…`, Coworker `01a10f51-9560…` (11:46 SGT).
 - [ ] Request event workspace connect + approval **now** (approval is manual).
-- [ ] Blockfrost preprod key. Postgres + MPS running locally on :3012, health OK.
+      Requested ~11:48 SGT; approval **PENDING** (`docs/EVIDENCE.md` Event workspace, `docs/OPS.md`).
+- [x] Blockfrost preprod key. Postgres + MPS running locally on :3012, health OK.
+      Evidence: `docs/EVIDENCE.md` Masumi — payment source `Web3CardanoV2` seeded 12:04 SGT; health check in `docs/OPS.md`.
 - [ ] Fund selling wallet + Orchestrator wallet from dispenser.masumi.network.
-- [ ] Register agent in MPS admin (Dynamic pricing). Mint takes 5–15 min: start it, move on.
+      Selling wallet DONE (100 tADA + 100 tUSDM, `docs/EVIDENCE.md` Selling wallet address). Purchasing (Orchestrator) wallet NOT DONE.
+- [x] Register agent in MPS admin (Dynamic pricing). Mint takes 5–15 min: start it, move on.
+      Evidence: `docs/EVIDENCE.md` Masumi — RegistrationConfirmed 12:19 SGT, mint tx `c7971f7a…e9e8f5`, agentIdentifier `67ab0c92…000000`.
 - [x] Repo scaffold: Next.js + `src/` + tsconfig + lint + vitest (T-001, merge 8ffcf5a; typecheck/lint/test/build green). `.env.example` still to fill (T-005).
 
 ### M1 — guard-core (h3–h8)

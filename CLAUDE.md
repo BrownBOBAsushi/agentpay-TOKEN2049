@@ -18,6 +18,10 @@ Cardano "Agentic Commerce" track, 6–8 October 2026. Deadline: 7 Oct 23:59 SGT.
    Read these before you write code against Masumi, Sokosumi, or x402. Do not guess an API.
    Official links are in `docs/research/LINKS.md`. The organisers' Quickstart
    (https://www.masumi.network/token2049) wins when sources conflict.
+7. `docs/OPS.md` — infra state, where things run, secrets map (no values), setup gotchas.
+   `orch` owns it and updates it when infra changes. Every web or deploy task card must
+   cite its "Vercel rule" (keep `agentpay-guard-cardano.vercel.app` and
+   `/examples/guard-receipt-refuse.json` alive: the registry NFT points there).
 
 ## Stack
 

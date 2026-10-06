@@ -1,0 +1,77 @@
+# OPS — Infrastructure state, secrets map, and gotchas
+
+> Written at handoff from the setup session (2026-10-06 ~13:30 SGT). `orch` owns this file now:
+> update it when infra changes. Every web or deploy task card must cite the "Vercel rule" below.
+> IDs and tx hashes are in `docs/EVIDENCE.md`. No secret values are in this file.
+
+## M0 status (evidence in EVIDENCE.md)
+
+| Item | State |
+|---|---|
+| Sokosumi account, CLI, Vendor `agentpay-guard`, Coworker "AgentPay Guard" (`tasks`) | DONE 11:46 |
+| Coworker runtime key | DONE — in OS vault (`runtime key-import`) and `.env.local` |
+| Event workspace access | **PENDING** — organiser approval (requested ~11:48) |
+| Blockfrost preprod key | DONE — HTTP 200 on preprod health |
+| MPS + Postgres local, health OK | DONE — `http://127.0.0.1:3012/api/v1/health` = ok |
+| Selling wallet funded | DONE — 100 tADA + 100 tUSDM, plus 5 tADA collateral UTxO |
+| Purchasing (Orchestrator) wallet funded | NOT DONE — 0 balance |
+| Agent registered (Masumi registry NFT) | DONE 12:19 — `RegistrationConfirmed` |
+| Hosted MPS + worker (Railway) | NOT DONE (M2) |
+
+## Where things run
+
+| Thing | Location | How to start / check |
+|---|---|---|
+| MPS | `~/Github/masumi-payment-service` (commit `71455701`), port 3012 | `pnpm run dev` (runs in the Claude desktop Terminal panel tab "masumi payment service"). Admin UI: http://127.0.0.1:3012/admin/ |
+| Postgres for MPS | Docker container `masumi-pg`, `127.0.0.1:5433`, volume `masumi-pg-data` | `docker start masumi-pg` after a reboot; Docker Desktop must run |
+| Web placeholder | Vercel project `agentpay-guard-cardano` → https://agentpay-guard-cardano.vercel.app | Deployed from a scratch folder, not from this repo (see "Vercel rule") |
+| MPS OpenAPI | `mps-openapi.json` at repo root (gitignored) | Re-fetch: `curl http://127.0.0.1:3012/api-docs -o mps-openapi.json` |
+
+## Secrets map (values never in git, chat, or logs)
+
+| Secret | Lives in |
+|---|---|
+| `SOKOSUMI_COWORKER_API_KEY` | repo `.env.local` (0600) + macOS vault via `sokosumi runtime key-import` |
+| Blockfrost preprod key | MPS `.env` and repo `.env.local` |
+| MPS `ADMIN_KEY`, `ENCRYPTION_KEY`, `DATABASE_URL` | `~/Github/masumi-payment-service/.env` (0600). `ENCRYPTION_KEY` decrypts the wallet keys: back it up |
+| Wallet mnemonics (seed output) | `~/.masumi-seed-backup.log` (0600) until the human copies them to a password manager and deletes it |
+| MPS runtime token for the worker (`ReadAndPay`, selling wallet) | NOT CREATED YET — create in admin UI before M2 |
+
+Read a secret in a script only by reference (`$(grep ^KEY= file | cut -d= -f2-)`); never `cat` an env file.
+Files in `.env.local` must end with a newline — an append once merged two lines.
+
+## Gotchas found during setup (save time; do not rediscover)
+
+**Sokosumi CLI (v1.0.4)**
+- `npm i -g @masumi_network/sokosumi` warns `EBADENGINE` (wants Node 24.x; we run 26). It works.
+- `auth login` token lasts ~1 hour (first one expired 13:45 SGT). Re-run `sokosumi --preprod auth login` when commands fail with 401.
+- `coworkers api-key` masks the token in text mode and returns it only once. Always use `--json` and redirect to a 0600 file. One unused masked key (`..bS48`) exists.
+- `runtime key-import` needs `--api-key-stdin` and a `coworker_*` key.
+- `connect --workspace-id` returning `PENDING` is success (approval request), not failure.
+- Bundled skill docs: `$(sokosumi skills path)/sokosumi/SKILL.md`.
+
+**MPS**
+- Install takes ~10 min (`pnpm@10.30.2`).
+- `cp .env.example .env` copies two placeholders that break seeding: `PAYMENT_SMART_CONTRACT_ADDRESS_PREPROD="customized smart contract address"` and `REGISTRY_POLICY_ID_PREPROD=...`. They are commented out in our `.env`. Do not set them.
+- Seed prints wallet mnemonics: always redirect seed output to a 0600 file.
+- Auth header is `token: <ADMIN_KEY>` (not Bearer).
+- `GET /registry` returns `[]` unless you pass `filterPaymentSourceType=Web3CardanoV2` (or `filterSmartContractAddress`).
+- `GET /payment-source` does not list hot wallets; use `GET /wallet/list` (types `Selling`, `Purchasing`).
+- `POST /registry` V2 body that worked: `type: Standard`, `sellingWalletVkey`, `apiBaseUrl` (HTTPS, required for Standard), `Tags`, `ExampleOutputs[{name,url,mimeType}]`, `Capability{name,version}`, `Author{name,organization,contactOther}`, `supportedPaymentSources[{chain:Cardano, network:Preprod, paymentSourceType:Web3CardanoV2, address:<escrow contract>, pricing:{pricingType:Dynamic}}]`. Mint confirmed in ~4 min.
+
+**Vercel rule (permanent)**
+- The registry NFT is immutable and points at `https://agentpay-guard-cardano.vercel.app` and
+  `/examples/guard-receipt-refuse.json`. When the real web app deploys, deploy it to Vercel
+  project `agentpay-guard-cardano` and keep `public/examples/guard-receipt-refuse.json`
+  served at that exact path. Breaking it breaks the on-chain metadata link.
+
+**herdr**
+- Only a Claude running inside herdr (`HERDR_ENV=1`) may control panes. The Claude desktop
+  session cannot.
+
+## Open human tasks
+
+1. Copy mnemonics + MPS `.env` to a password manager, then `rm ~/.masumi-seed-backup.log`.
+2. Fund the purchasing wallet `addr_test1qq33kw…ghzlc7` at dispenser.masumi.network (for the Orchestrator / buyer rehearsal).
+3. Watch for the event-workspace approval email; then run the event steps in `MASUMI-DIGEST.md` §1 step 12.
+4. Railway account (M2).
