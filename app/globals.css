@@ -46,13 +46,14 @@ p { max-width: 70ch; }
 .cheque-content { position: relative; z-index: 1; }
 .security-paper { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
 .rainbow-paper { position: absolute; inset: 0; background: linear-gradient(100deg, #dfe9e1 0%, #e4ecef 50%, #efe6d4 100%); }
-.guilloche-field { position: absolute; width: min(36%, 540px); height: auto; right: 2%; top: 50%; transform: translateY(-50%); fill: none; stroke-width: .55px; opacity: .45; }
+.security-inks { position: absolute; inset: 0; }
+.guilloche-field { fill: none; stroke-width: .45px; }
 .guilloche-field path { vector-effect: non-scaling-stroke; }
-.sage-ink { stroke: #7fa79c; }
-.bronze-ink { stroke: #b39a6e; }
-.pantograph, .paper-grain { position: absolute; inset: 0; fill: var(--ink); }
+.sage-ink { stroke: #7fa79c; opacity: .45; }
+.bronze-ink { stroke: #c9b28a; opacity: .45; }
 .pantograph { opacity: .06; }
-.copy-latent { font-family: var(--font-legends), serif; font-size: 140px; }
+.copy-pantograph { opacity: .11; }
+.copy-latent { font-family: var(--font-legends), serif; }
 .paper-grain { opacity: .035; }
 .wave-band { position: absolute; stroke: #7fa79c; stroke-width: .5px; }
 .wave-band path { fill: none; }
@@ -65,8 +66,6 @@ p { max-width: 70ch; }
 .microprint { position: absolute; height: 6px; fill: var(--ink-2); font-family: var(--font-prose), sans-serif; font-size: 4.5px; letter-spacing: .06em; overflow: hidden; }
 .frame-microprint { top: 22px; left: 24px; width: calc(100% - 48px); }
 .cheque .signature-line { border-bottom-color: transparent; }
-/* A paper wash under values keeps every original ink colour legible over any plate overlap. */
-.cheque .value { background-color: rgb(228 236 239 / 92%); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .legend-brand { display: inline-flex; align-items: center; gap: 12px; }
 .engraved-seal { flex: 0 0 60px; width: 60px; height: 60px; fill: none; stroke: var(--ink); stroke-width: .5px; }
 .printed-legend { display: flex; align-items: center; justify-content: space-between; gap: 24px; font-family: var(--font-legends), serif; font-size: 22px; }
@@ -177,7 +176,9 @@ footer nav { display: flex; gap: 24px; }
 }
 
 @media (prefers-contrast: more) {
-  .pantograph, .paper-grain, .microprint { display: none; }
+  .pantograph, .copy-pantograph, .paper-grain, .microprint { display: none; }
   .rainbow-paper { opacity: .5; }
   .guilloche-field { opacity: .15; }
 }
+
+@media (max-width: 639px) { .guilloche-field { display: none; } }

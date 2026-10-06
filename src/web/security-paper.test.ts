@@ -16,7 +16,7 @@ test("both ink plates are deterministic, sensitive and have different lobe count
   expect(plates.sage).not.toEqual(changed.sage); expect(plates.bronze).not.toEqual(changed.bronze);
   expect(plates.bronze).toEqual(twoInkGuilloche(`${digest.startsWith("00") ? "01" : "00"}${digest.slice(2)}`).bronze);
   for (const plate of [plates.sage, plates.bronze]) {
-    expect(plate.length).toBeGreaterThanOrEqual(40); expect(plate.length).toBeLessThanOrEqual(70);
+    expect(plate.length).toBeGreaterThanOrEqual(24); expect(plate.length).toBeLessThanOrEqual(36);
     expect(plate.every((path) => path.startsWith("M") && path.endsWith("Z") && !path.includes("NaN"))).toBe(true);
   }
 });
@@ -53,13 +53,22 @@ const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 
 const blend = (front: number[], back: number[], alpha: number) => front.map((channel, i) => channel * alpha + back[i] * (1 - alpha));
 const luminance = (color: number[]) => color.reduce((sum, channel, i) => sum + (channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4) * [.2126, .7152, .0722][i], 0);
 
-test("all value ink colours clear 4.5:1 even against a maximally dark texture", () => {
-  // Black is a conservative mathematical bound, not a colour added to the design.
-  const background = blend(rgb("#e4ecef"), [0, 0, 0], .92);
-  for (const ink of ["#16303a", "#4a5f67", "#b3261e"]) {
-    expect((luminance(background) + .05) / (luminance(rgb(ink)) + .05)).toBeGreaterThanOrEqual(4.5);
+test("soft value cut-outs keep the rainbow paper above 4.5:1 without a text underlay", () => {
+  // Eight pixels of padding around values with sigma=2 leaves <0.0001
+  // residual texture alpha even at a corner. Bound that residue with black.
+  for (const paper of ["#dfe9e1", "#e4ecef", "#efe6d4"]) {
+    const background = blend([0, 0, 0], rgb(paper), .0001);
+    for (const ink of ["#16303a", "#4a5f67", "#b3261e"]) {
+      expect((luminance(background) + .05) / (luminance(rgb(ink)) + .05)).toBeGreaterThanOrEqual(4.5);
+    }
   }
   const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
-  expect(css).toContain("background-color: rgb(228 236 239 / 92%)");
-  expect(css).toMatch(/@media \(prefers-contrast: more\)[\s\S]*\.pantograph, \.paper-grain, \.microprint \{ display: none; \}/);
+  expect(css).not.toContain("rgb(228 236 239 / 92%)");
+  expect(css).toContain(".copy-pantograph { opacity: .11; }");
+  expect(css).toContain("@media (max-width: 639px) { .guilloche-field { display: none; } }");
+  expect(css).toMatch(/@media \(prefers-contrast: more\)[\s\S]*\.pantograph, \.copy-pantograph, \.paper-grain, \.microprint \{ display: none; \}/);
+  const html = renderToStaticMarkup(createElement(SecurityPaper, { digest: landingBundle.digest, presented: true }));
+  expect(html).toContain('stdDeviation="2"'); expect(html).toContain('maskUnits="userSpaceOnUse"');
+  expect(html).toContain('style="visibility:hidden"'); // No unmasked flash before text is measured.
+  expect(html).toContain('class="copy-latent"'); expect(html).toContain('x="32%"');
 });

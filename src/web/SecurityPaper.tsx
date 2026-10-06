@@ -47,6 +47,7 @@ export function SecurityPaper({ digest, presented = false }: { digest: string | 
   const id = useId().replace(/:/g, "");
   const layer = useRef<HTMLDivElement>(null);
   const [signature, setSignature] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [layout, setLayout] = useState<{ width: number; height: number; values: { x: number; y: number; width: number; height: number }[] } | null>(null);
   const inks = useMemo(() => digest ? twoInkGuilloche(digest) : null, [digest]);
   useEffect(() => {
     const overlay = layer.current;
@@ -54,37 +55,62 @@ export function SecurityPaper({ digest, presented = false }: { digest: string | 
     if (!paper || !overlay) return;
     // The edit form supplies its own signature field. Measure that field rather
     // than duplicate or change its form markup. This overlay never captures input.
+    const content = paper.querySelector(".cheque-content");
     const measure = () => {
+      const origin = overlay.getBoundingClientRect();
+      const values = Array.from(paper.querySelectorAll(".value")).flatMap((value) => Array.from(value.getClientRects()).map((rect) => ({
+        x: rect.left - origin.left, y: rect.top - origin.top, width: rect.width, height: rect.height,
+      })));
+      const next = { width: origin.width, height: origin.height, values };
+      setLayout((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next);
       const target = paper.querySelector(".signature-line, .signature-block .signature-short, .signature-block > p:last-child");
-      if (!target) return;
-      const rect = target.getBoundingClientRect(); const origin = overlay.getBoundingClientRect();
-      setSignature({ left: rect.left - origin.left, top: rect.bottom - origin.top - (target.matches(".signature-line") ? 5 : -2), width: rect.width });
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        setSignature({ left: rect.left - origin.left, top: rect.bottom - origin.top - (target.matches(".signature-line") ? 5 : -2), width: rect.width });
+      }
     };
     const observer = new ResizeObserver(measure); observer.observe(paper);
-    const content = paper.querySelector(".cheque-content"); if (content) observer.observe(content);
-    return () => observer.disconnect();
+    if (content) observer.observe(content);
+    const mutations = new MutationObserver(measure);
+    if (content) mutations.observe(content, { childList: true, characterData: true, subtree: true });
+    let active = true;
+    void document.fonts.ready.then(() => { if (active) measure(); });
+    return () => { active = false; observer.disconnect(); mutations.disconnect(); };
   }, []);
+  const size = layout ? Math.min(layout.width * .36, 540) : 0;
   return <div className="security-paper" aria-hidden="true" ref={layer}>
     <div className="rainbow-paper" />
-    {inks && <svg className="guilloche-field" viewBox="0 0 600 600" focusable="false">
-      <g className="sage-ink">{inks.sage.map((path, i) => <path key={i} d={path} />)}</g>
-      <g className="bronze-ink" transform="translate(42 30) scale(.88)">{inks.bronze.map((path, i) => <path key={i} d={path} />)}</g>
-    </svg>}
-    <svg className="pantograph" width="100%" height="100%" focusable="false">
+    <svg className="security-inks" width="100%" height="100%" focusable="false" style={{ visibility: layout ? "visible" : "hidden" }}>
       <defs>
-        <pattern id={`${id}-dots`} patternUnits="userSpaceOnUse" width="3" height="3"><circle cx="1.5" cy="1.5" r=".3" /></pattern>
-        {presented && <><pattern id={`${id}-copy-dots`} patternUnits="userSpaceOnUse" width="2" height="2"><circle cx="1" cy="1" r=".3" /></pattern>
-          <clipPath id={`${id}-copy`}><text x="65%" y="55%" textAnchor="middle" className="copy-latent">COPY</text></clipPath></>}
+        <filter id={`${id}-feather`} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2" /></filter>
+        <mask id={`${id}-values`} maskUnits="userSpaceOnUse" x="0" y="0" width="100%" height="100%" style={{ maskType: "luminance" }}>
+          <rect width="100%" height="100%" fill="white" />
+          <g fill="black" filter={`url(#${id}-feather)`}>{layout?.values.map((rect, i) =>
+            <rect key={i} x={rect.x - 8} y={rect.y - 8} width={rect.width + 16} height={rect.height + 16} />)}</g>
+        </mask>
+        <pattern id={`${id}-dots`} patternUnits="userSpaceOnUse" width="3" height="3"><circle cx="1.5" cy="1.5" r=".3" fill="var(--ink)" /></pattern>
+        {presented && <>
+          <pattern id={`${id}-copy-dots`} patternUnits="userSpaceOnUse" width="2" height="2"><circle cx="1" cy="1" r=".3" fill="var(--ink)" /></pattern>
+          <text id={`${id}-copy-word`} x="32%" y="60%" textAnchor="middle" className="copy-latent" fontSize={(layout?.height ?? 0) * .4} textLength={(layout?.width ?? 0) * .56} lengthAdjust="spacingAndGlyphs">COPY</text>
+          <clipPath id={`${id}-copy`}><use href={`#${id}-copy-word`} /></clipPath>
+          <mask id={`${id}-outside-copy`} x="0" y="0" width="100%" height="100%" style={{ maskType: "luminance" }}>
+            <rect width="100%" height="100%" fill="white" /><use href={`#${id}-copy-word`} fill="black" />
+          </mask>
+        </>}
+        <filter id={`${id}-grain`} x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" stitchTiles="stitch" seed="14" />
+          <feColorMatrix type="matrix" values="0 0 0 0 0.08627451 0 0 0 0 0.18823529 0 0 0 0 0.22745098 1 0 0 0 0" />
+        </filter>
       </defs>
-      <rect width="100%" height="100%" fill={`url(#${id}-dots)`} />
-      {presented && <rect data-pantograph="COPY" width="100%" height="100%" fill={`url(#${id}-copy-dots)`} clipPath={`url(#${id}-copy)`} />}
-    </svg>
-    <svg className="paper-grain" width="100%" height="100%" focusable="false">
-      <defs><filter id={`${id}-grain`} x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
-        <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" stitchTiles="stitch" seed="14" />
-        <feColorMatrix type="matrix" values="0 0 0 0 0.08627451 0 0 0 0 0.18823529 0 0 0 0 0.22745098 1 0 0 0 0" />
-      </filter></defs>
-      <rect width="100%" height="100%" filter={`url(#${id}-grain)`} />
+      <g mask={`url(#${id}-values)`}>
+        {inks && <svg className="guilloche-field" x={(layout?.width ?? 0) * .98 - size} y={((layout?.height ?? 0) - size) / 2} width={size} height={size} viewBox="0 0 600 600">
+          <g className="sage-ink">{inks.sage.map((path, i) => <path key={i} d={path} />)}</g>
+          <g className="bronze-ink" transform="translate(42 30) scale(.88)">{inks.bronze.map((path, i) => <path key={i} d={path} />)}</g>
+        </svg>}
+        <rect className="pantograph" width="100%" height="100%" fill={`url(#${id}-dots)`} mask={presented ? `url(#${id}-outside-copy)` : undefined} />
+        {presented && <rect className="copy-pantograph" data-pantograph="COPY" width="100%" height="100%" fill={`url(#${id}-copy-dots)`} clipPath={`url(#${id}-copy)`} />}
+        <rect className="paper-grain" width="100%" height="100%" filter={`url(#${id}-grain)`} />
+      </g>
     </svg>
     {(["top", "bottom", "left", "right"] as const).map((edge) => {
       const vertical = edge === "left" || edge === "right";
