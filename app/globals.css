@@ -42,10 +42,32 @@ p { max-width: 70ch; }
 }
 .opening { min-height: 100svh; display: flex; align-items: center; padding: 32px; }
 .cheque { width: 100%; position: relative; isolation: isolate; border: 1px solid var(--ink); padding: clamp(24px, 3vw, 48px); background: var(--paper); overflow: clip; }
-.cheque::after { content: ""; position: absolute; inset: 7px; border: 1px solid var(--guilloche); pointer-events: none; z-index: -1; }
-.guilloche-field { position: absolute; width: min(36%, 540px); height: auto; right: 2%; top: 50%; transform: translateY(-50%); fill: none; stroke: var(--guilloche); stroke-width: .45; z-index: -1; pointer-events: none; }
-.guilloche-border { position: absolute; inset: 11px; width: calc(100% - 22px); height: calc(100% - 22px); fill: none; stroke: var(--guilloche); stroke-width: .35; z-index: -1; pointer-events: none; }
-.guilloche-border path { vector-effect: non-scaling-stroke; }
+.cheque::after { content: ""; position: absolute; inset: 7px; border: 1px solid var(--guilloche); pointer-events: none; z-index: 0; }
+.cheque-content { position: relative; z-index: 1; }
+.security-paper { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.rainbow-paper { position: absolute; inset: 0; background: linear-gradient(100deg, #dfe9e1 0%, #e4ecef 50%, #efe6d4 100%); }
+.security-inks { position: absolute; inset: 0; }
+.guilloche-field { fill: none; stroke-width: .45px; }
+.guilloche-field path { vector-effect: non-scaling-stroke; }
+.sage-ink { stroke: #7fa79c; opacity: .45; }
+.bronze-ink { stroke: #c9b28a; opacity: .45; }
+.pantograph { opacity: .06; }
+.copy-pantograph { opacity: .11; }
+.copy-latent { font-family: var(--font-legends), serif; }
+.paper-grain { opacity: .035; }
+.wave-band { position: absolute; stroke: #7fa79c; stroke-width: .5px; }
+.wave-band path { fill: none; }
+.wave-top, .wave-bottom { left: 11px; width: calc(100% - 22px); height: 9px; }
+.wave-top { top: 11px; }
+.wave-bottom { bottom: 11px; }
+.wave-left, .wave-right { top: 11px; height: calc(100% - 22px); width: 9px; }
+.wave-left { left: 11px; }
+.wave-right { right: 11px; }
+.microprint { position: absolute; height: 6px; fill: var(--ink-2); font-family: var(--font-prose), sans-serif; font-size: 4.5px; letter-spacing: .06em; overflow: hidden; }
+.frame-microprint { top: 22px; left: 24px; width: calc(100% - 48px); }
+.cheque .signature-line { border-bottom-color: transparent; }
+.legend-brand { display: inline-flex; align-items: center; gap: 12px; }
+.engraved-seal { flex: 0 0 60px; width: 60px; height: 60px; fill: none; stroke: var(--ink); stroke-width: .5px; }
 .printed-legend { display: flex; align-items: center; justify-content: space-between; gap: 24px; font-family: var(--font-legends), serif; font-size: 22px; }
 .printed-legend .value { font-size: 14px; color: var(--ink-2); }
 .cheque-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, .37fr); gap: 20px 40px; align-items: end; }
@@ -124,7 +146,6 @@ footer nav { display: flex; gap: 24px; }
   .printed-legend { align-items: start; flex-direction: column; gap: 4px; font-size: 22px; }
   h1 { margin: 32px 0; font-size: clamp(32px, 7.3vw, 54px); }
   .desktop-break { display: none; }
-  .guilloche-field { width: 88%; top: 40%; right: 6%; }
   .cheque-fields, .cheque-presented .cheque-fields { grid-template-columns: 1fr; gap: 24px; }
   .cheque-fields > * { grid-area: auto; }
   .payee-line .value { font-size: 16px; }
@@ -153,3 +174,11 @@ footer nav { display: flex; gap: 24px; }
 @media print {
   .stamp-returned[data-motion] { animation: none; opacity: 1; transform: rotate(-6deg); filter: none; }
 }
+
+@media (prefers-contrast: more) {
+  .pantograph, .copy-pantograph, .paper-grain, .microprint { display: none; }
+  .rainbow-paper { opacity: .5; }
+  .guilloche-field { opacity: .15; }
+}
+
+@media (max-width: 639px) { .guilloche-field { display: none; } }

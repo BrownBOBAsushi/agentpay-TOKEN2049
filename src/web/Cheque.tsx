@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { MandateBundle } from "../guard/bundle";
-import { guillochePaths, guillocheBorderPaths } from "./guilloche";
+import { EngravedSeal, SecurityPaper } from "./SecurityPaper";
 import { CopySignature } from "./CopySignature";
 import { atomicToDecimal, groupAtomic } from "./amount";
 
@@ -20,22 +20,11 @@ type ReadChequeProps = {
 };
 type EditChequeProps = { edit: ReactNode; heading: ReactNode; patternDigest: string | null };
 
-function ChequePattern({ digest }: { digest: string }) {
-  return <>
-    <svg className="guilloche-field" viewBox="0 0 600 600" aria-hidden="true">
-      {guillochePaths(digest).map((path, i) => <path key={i} d={path} />)}
-    </svg>
-    <svg className="guilloche-border" viewBox="0 0 1200 600" preserveAspectRatio="none" aria-hidden="true">
-      {guillocheBorderPaths(digest).map((path, i) => <path key={i} d={path} />)}
-    </svg>
-  </>;
-}
-
 export function Cheque(props: ReadChequeProps | EditChequeProps) {
   if ("edit" in props) return <article className="cheque">
-    {props.patternDigest && <ChequePattern digest={props.patternDigest} />}
+    <SecurityPaper digest={props.patternDigest} />
     <div className="cheque-content">
-      <div className="printed-legend"><span>AgentPay Guard</span><span className="value">cardano:preprod</span></div>
+      <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className="value">cardano:preprod</span></div>
       {props.heading}{props.edit}
     </div>
   </article>;
@@ -46,9 +35,9 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
   const signature = bundle.coseSign1;
   const humanAmount = (amount: string, asset = m.asset) => asset === "lovelace" ? `${atomicToDecimal(amount)} tADA` : amount;
   return <article className={`cheque${presented ? " cheque-presented" : ""}`}>
-    <ChequePattern digest={patternDigest} />
+    <SecurityPaper digest={patternDigest} presented={!!presented} />
     <div className="cheque-content">
-      <div className="printed-legend"><span>AgentPay Guard</span><span className="value">{presented?.network ?? m.network}</span></div>
+      <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className="value">{presented?.network ?? m.network}</span></div>
       {heading}
       <div className="cheque-fields">
         <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} /></div>
