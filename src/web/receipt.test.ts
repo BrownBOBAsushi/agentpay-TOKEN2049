@@ -23,7 +23,8 @@ function fake(settings: { status?: string; taskStatus?: number; comment?: string
     expect(init?.method).toBe("GET");
     expect(init?.headers).toHaveProperty("Authorization", "Bearer KEY123");
     expect(init?.redirect).toBe("error");
-    expect(init?.cache).toBe("no-store");
+    expect(init?.cache).toBeUndefined();
+    expect(init).toHaveProperty("next.revalidate", 60);
     const path = new URL(String(input)).pathname;
     if (path.endsWith("/events")) return Response.json({ data: [{ status: "COMPLETED", comment: settings.comment ?? JSON.stringify(signed),
       ...(settings.paid ? { masumiPayment: { paymentId: "test" } } : {}) }] });
@@ -96,4 +97,26 @@ test("pagination finds the completed event", async () => {
   });
   expect(await render(fetcher)).toContain("Guard signature valid");
   expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("?cursor=next"))).toBe(true);
+});
+
+
+test("all Core GETs opt into 60-second Next caching, including unknown tasks", async () => {
+  const fetcher = fake(); await render(fetcher);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  for (const [, init] of fetcher.mock.calls) {
+    expect(init).toHaveProperty("next.revalidate", 60);
+    expect(init?.cache).toBeUndefined();
+  }
+  const missing = fake({ taskStatus: 404 });
+  expect(await render(missing, "unknown-task")).toContain("No Guard Receipt for this Task");
+  expect(missing.mock.calls[0][1]).toHaveProperty("next.revalidate", 60);
+});
+test("Diff shows human tADA amounts, atomic detail and plain digest labels", async () => {
+  const html = await render(fake());
+  const diff = html.slice(html.indexOf('id="receipt-diff"'), html.indexOf('aria-label="Mandate and Spend Proposal"'));
+  expect(diff).toContain("2 tADA"); expect(diff).toContain("2,000,000 lovelace");
+  expect(diff).toContain("9 tADA</del>"); expect(diff).toContain("9,000,000 lovelace");
+  for (const label of ["Receipt digest", "Mandate digest", "Proposal digest"]) {
+    expect(html).toContain(label); expect(html).toContain(`Copy ${label}`);
+  }
 });

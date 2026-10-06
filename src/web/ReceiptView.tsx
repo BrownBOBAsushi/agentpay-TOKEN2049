@@ -2,8 +2,20 @@ import Link from "next/link";
 import { Cheque } from "./Cheque";
 import { Stamp } from "./Stamp";
 import { CopyValue } from "./CopyValue";
+import { atomicToDecimal, groupAtomic } from "./amount";
 import type { ReceiptPageData } from "./receipt-types";
 import styles from "./receipt.module.css";
+
+function DiffValue({ value, asset, struck = false }: { value: string; asset?: string; struck?: boolean }) {
+  const isAmount = asset && /^\d+$/.test(value);
+  const main = isAmount && asset === "lovelace" ? `${atomicToDecimal(value)} tADA` : value;
+  return <>
+    {struck ? <del className="value">{main}</del> : <span className="value">{main}</span>}
+    {isAmount && <small className={`value ${styles.atomic}`}>{groupAtomic(value)} {asset}</small>}
+  </>;
+}
+
+const digestLabels = { receipt: "Receipt digest", mandate: "Mandate digest", proposal: "Proposal digest" };
 
 export function ReceiptView({ data }: { data: ReceiptPageData }) {
   if (data.kind !== "receipt") {
@@ -31,10 +43,10 @@ export function ReceiptView({ data }: { data: ReceiptPageData }) {
     <section aria-labelledby="receipt-diff"><h2 id="receipt-diff">Field Diff</h2>
       {data.diff.length === 0 && <p>No differing fields in this Guard Receipt.</p>}
       {data.diff.map((entry, index) => <div className={styles.diff} key={`${entry.field}-${index}`}>
-        <h3>{entry.field}</h3><div><span className="field-label">Signed</span><span className="value">{entry.signed}</span></div>
-        <div><span className={styles.invalid}>MUST NOT</span><span className="field-label">Presented</span><del className="value">{entry.proposed}</del></div>
+        <h3>{entry.field}</h3><div><span className="field-label">Signed</span><DiffValue value={entry.signed} asset={entry.field === "amount" ? data.bundle?.mandate.asset : undefined} /></div>
+        <div><span className={styles.invalid}>MUST NOT</span><span className="field-label">Presented</span><DiffValue value={entry.proposed} asset={entry.field === "amount" ? data.proposal?.requirements.asset : undefined} struck /></div>
       </div>)}
-      <dl className={styles.matching}>{data.matching.map((entry) => <div key={entry.field}><dt>{entry.field} · matches</dt><dd className="value">{entry.signed}</dd></div>)}</dl>
+      <dl className={styles.matching}>{data.matching.map((entry) => <div key={entry.field}><dt>{entry.field} · matches</dt><dd><DiffValue value={entry.signed} asset={entry.field === "amount" ? data.bundle?.mandate.asset : undefined} /></dd></div>)}</dl>
     </section>
     {data.bundle && data.proposal ? <section className={styles.cheques} aria-label="Mandate and Spend Proposal">
       <Cheque bundle={data.bundle} heading={<h2>Signed Mandate</h2>} patternDigest={data.digests.mandate!} signatureNote="Mandate CIP-8 signature" />
@@ -49,7 +61,7 @@ export function ReceiptView({ data }: { data: ReceiptPageData }) {
           {data.anchor.txHash && <a href={`https://preprod.cardanoscan.io/transaction/${data.anchor.txHash}`}>View transaction on Cardanoscan preprod <span className="value">{data.anchor.txHash}</span></a>}</>}
     </section>
     <section className={styles.digests} aria-label="Receipt digests">{Object.entries(data.digests).map(([name, value]) => <div key={name}>
-      <h2>{name}Digest</h2>{!value || /^0{64}$/.test(value) ? <p>unavailable</p> : <CopyValue label={`${name}Digest`} value={value} />}
+      <h2>{digestLabels[name as keyof typeof digestLabels]}</h2>{!value || /^0{64}$/.test(value) ? <p>unavailable</p> : <CopyValue label={digestLabels[name as keyof typeof digestLabels]} value={value} />}
     </div>)}</section>
   </main>;
 }

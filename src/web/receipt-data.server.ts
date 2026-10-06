@@ -41,7 +41,7 @@ export async function loadReceipt(id: string, options: {
   if (!options.origin || !options.apiKey || !options.guardAddress) return { kind: "unreachable" };
   try {
     const core = createCoreClient({ origin: options.origin, apiKey: options.apiKey,
-      fetch: (input, init) => options.fetch(input, { ...init, cache: "no-store" }) });
+      fetch: (input, init) => options.fetch(input, { ...init, next: { revalidate: 60 } }) });
     let task;
     try { task = await core.getTask(id); }
     catch (error) { if (notFound(error)) return { kind: "not-found" }; throw error; }

@@ -27,3 +27,5 @@
   .header > :last-child { max-width: 360px; }
   .diff :global(.value) { font-size: 22px; }
 }
+
+.atomic, .diff .atomic:global(.value) { display: block; font-size: 14px; color: var(--ink-2); }
