@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "network": "cardano:preprod",
+  "payer": "addr_test1vqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqd9tg5t",
+  "payee": "demo-agent",
+  "asset": "lovelace",
+  "amount": "2000000",
+  "expiry": 1791331200,
+  "nonce": "00112233445566778899aabbccddeeff",
+  "purpose": "Buy market data"
+}
