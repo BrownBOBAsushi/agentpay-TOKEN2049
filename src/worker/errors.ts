@@ -5,9 +5,11 @@ export class WorkerError extends Error {
   }
 }
 
-// Only application-owned fixed messages may reach the terminal. Driver errors can contain data.
+// Only application-owned or sanitized messages may reach the terminal. Driver errors can contain data.
+export function workerErrorDetail(error: unknown): string {
+  return error instanceof WorkerError ? `${error.name}: ${error.message}` : "Error: Worker operation failed";
+}
+
 export function formatWorkerFailure(error: unknown): string {
-  return error instanceof WorkerError
-    ? `worker_failed ${error.name}: ${error.message}`
-    : "worker_failed Error: Worker operation failed";
+  return `worker_failed ${workerErrorDetail(error)}`;
 }

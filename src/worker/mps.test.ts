@@ -1,12 +1,31 @@
 import { expect, test } from "vitest";
 import { createMpsClient, mpsBaseUrl } from "./mps";
 import type { PaymentRequest } from "./mps";
-import { formatWorkerFailure } from "./errors";
+import { formatWorkerFailure, workerErrorDetail } from "./errors";
 import { SafeToRetryError } from "./store";
 
 const options = { baseUrl: "http://127.0.0.1:3012/api/v1", token: "TEST_SECRET" };
 test.each(["http://example.com", "http://127.0.0.1.example.com", "https://user:TEST_SECRET@example.com", "ftp://localhost", "https://example.com/other", "https://example.com?token=TEST_SECRET"])("rejects unsafe MPS URL %#", (baseUrl) => {
   expect(() => mpsBaseUrl(baseUrl)).toThrow("Invalid MPS base URL");
+});
+
+test("MPS diagnostics redact the token and request, remove line breaks, and cap server text at 200 characters", async () => {
+  const request = { network: "Preprod", privateField: "REQUEST_ONLY" } as unknown as PaymentRequest;
+  const message = `sellerReturnAddress must be null\n${options.token} ${JSON.stringify(request)} ${"x".repeat(250)}`;
+  const mps = createMpsClient({ ...options, fetch: async () => Response.json({ status: "error", error: { message } }, { status: 400 }) });
+  const error = await mps.createPayment(request).catch((error: unknown) => error);
+  expect(error).toBeInstanceOf(SafeToRetryError);
+  expect((error as Error).message).toHaveLength("MPS HTTP 400: ".length + 200);
+  const line = `blocked task-id ${workerErrorDetail(error)}`;
+  expect(line).toContain("SafeToRetryError: MPS HTTP 400: sellerReturnAddress must be null");
+  for (const sensitive of [options.token, "REQUEST_ONLY", "\n"]) expect(line).not.toContain(sensitive);
+  expect((error as Error).stack).not.toContain(options.token);
+  expect((error as Error).cause).toBeUndefined();
+});
+
+test("HTTP 400 resolving a payment remains uncertain", async () => {
+  const mps = createMpsClient({ ...options, fetch: async () => Response.json({ error: { message: "Rejected" } }, { status: 400 }) });
+  await expect(mps.resolve("blockchain-id")).rejects.not.toBeInstanceOf(SafeToRetryError);
 });
 test.each(["http://localhost:3012", "http://127.0.0.1:3012/api/v1", "http://[::1]:3012", "https://mps.example.com/api/v1/"])("allows loopback HTTP or remote HTTPS %#", (baseUrl) => {
   expect(mpsBaseUrl(baseUrl)).toMatch(/\/api\/v1$/);

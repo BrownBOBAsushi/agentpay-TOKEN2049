@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { z } from "zod";
 import { WorkerError } from "./errors";
+import { SafeToRetryError } from "./store";
 
 export type PaymentRequest = {
   network: "Preprod"; agentIdentifier: string; paymentSourceType: "Web3CardanoV2";
@@ -30,7 +31,20 @@ export function createMpsClient(options: { baseUrl: string; token: string; fetch
       response = await options.fetch(`${base}${path}`, { method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
         headers: { token: options.token, "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } catch { throw new WorkerError("MPS transport failed"); }
-    if (!response.ok) throw new WorkerError(`MPS HTTP ${response.status}`);
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const parsed = z.object({ error: z.object({ message: z.string() }) }).safeParse(await response.json());
+        if (parsed.success) {
+          detail = parsed.data.error.message.split(JSON.stringify(body)).join("[redacted request]");
+          if (options.token) detail = detail.split(options.token).join("[redacted]");
+          detail = detail.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 200);
+        }
+      } catch { /* Non-JSON responses provide no safe diagnostic. */ }
+      const message = `MPS HTTP ${response.status}${detail ? `: ${detail}` : ""}`;
+      if (path === "/payment" && response.status === 400) throw new SafeToRetryError(message);
+      throw new WorkerError(message);
+    }
     let raw: unknown;
     try { raw = await response.json(); }
     catch { throw new WorkerError(`MPS returned invalid JSON (HTTP ${response.status})`); }
