@@ -29,7 +29,7 @@
 - [x] Repo scaffold: Next.js + `src/` + tsconfig + lint + vitest (T-001, merge 8ffcf5a; typecheck/lint/test/build green). `.env.example` still to fill (T-005).
 
 ### M1 — guard-core (h3–h8)
-- [ ] Mandate schema (zod), JCS, digest. Unit tests.
+- [x] Mandate schema (zod), JCS, digest. Unit tests. (T-002, 41 tests green; review APPROVE 7f97272)
 - [ ] CIP-8 verify (S3 done). Test with a real wallet signature fixture.
 - [ ] Matcher `x402` + Diff + reason codes. Tests for S1 happy path and S2 injection.
 - [ ] Guard Receipt sign/verify with Guard Key.
