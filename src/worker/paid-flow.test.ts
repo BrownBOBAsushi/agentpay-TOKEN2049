@@ -15,6 +15,8 @@ import { loadConfig } from "./config";
 import { formatWorkerFailure } from "./errors";
 import { pollOnce, taskMode } from "./index";
 import waiting from "./fixtures/mps-resolve-waiting.json";
+import resultPending from "./fixtures/mps-resolve-result-pending.json";
+import resultConfirmed from "./fixtures/mps-resolve-result-confirmed.json";
 import sellerReturnError from "./fixtures/mps-payment-400-seller-return.json";
 import type { Db } from "./db";
 
@@ -90,6 +92,7 @@ function setup(resolveState?: Record<string, unknown>, deadlines?: PaidTerms["de
   const advance = (storeDb: Db = db) => advancePaidTask({ task, core, mps, store: createStore(storeDb), guardKey, paid: { ...paid, deadlines }, nowSec, log: (stage) => logs.push(stage) });
   return { advance, events, logs, task, core, mps, setTime: (value: number) => { nowSec = value; },
     setCreateStatus: (value: number) => { createStatus = value; },
+    setResolveState: (value: Record<string, unknown>) => { resolveState = value; },
     setLocked: (value: boolean) => { locked = value; }, setConfirmed: (value: boolean) => { confirmed = value; }, setResultMatches: (value: boolean) => { resultMatches = value; },
     alter: (fn: typeof alterPayment) => { alterPayment = fn; }, snapshot: () => ({ created, payment, result, submittedHash }) };
 }
@@ -172,6 +175,30 @@ test("unconfirmed escrow and wrong result hash cannot advance", async () => {
   for (let i = 0; i < 3; i++) await flow.advance();
   flow.setResultMatches(false); await flow.advance();
   expect(flow.events).not.toContain("COMPLETED");
+});
+
+test.each([false, true])("pending result fixture waits, then a confirmed result completes (null fields: %s)", async (nullFields) => {
+  const flow = setup();
+  for (let i = 0; i < 6; i++) await flow.advance();
+  expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("await-result");
+  flow.setResolveState(nullFields ? { ...resultPending, onChainState: null, resultHash: null,
+    CurrentTransaction: { ...resultPending.CurrentTransaction, txHash: null },
+    TransactionHistory: [...resultPending.TransactionHistory, { status: "Pending", newOnChainState: null, previousOnChainState: null, txHash: null }],
+  } : resultPending);
+  for (let i = 0; i < 3; i++) await expect(flow.advance()).resolves.toBeUndefined();
+  expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("await-result");
+  expect(flow.events).not.toContain("COMPLETED");
+  const confirmed = { ...resultConfirmed, resultHash: flow.snapshot().submittedHash };
+  // Even a Confirmed transaction cannot confirm the result with a null destination state.
+  flow.setResolveState({ ...confirmed, CurrentTransaction: { ...confirmed.CurrentTransaction, newOnChainState: null } });
+  await expect(flow.advance()).resolves.toBeUndefined();
+  expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("await-result");
+  flow.setResolveState(confirmed);
+  await flow.advance();
+  expect((await createStore(db).readJournal(flow.task.id))?.stage).toBe("complete");
+  expect(flow.events).not.toContain("COMPLETED");
+  await flow.advance();
+  expect(flow.events.filter((event) => event === "COMPLETED")).toHaveLength(1);
 });
 
 test("uncertain terms POST is not retried", async () => {
