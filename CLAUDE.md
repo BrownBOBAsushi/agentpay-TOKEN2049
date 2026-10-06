@@ -48,4 +48,11 @@ Cardano "Agentic Commerce" track, 6–8 October 2026. Deadline: 7 Oct 23:59 SGT.
 
 ## Commands
 
-To be filled in at M0 scaffold (`dev`, `build`, `test`, `lint`, `worker`, `orchestrator`).
+- `npm run dev` — Start the Next.js development server at http://localhost:3000.
+- `npm run build` — Build the Next.js app for production.
+- `npm run typecheck` — Check all TypeScript files without emitting code.
+- `npm run lint` — Check files with ESLint; warnings fail the check.
+- `npm test` — Run the Vitest test suite once.
+- `npm run worker` — Run the empty Guard Worker entry file.
+- `npm run orchestrator` — Run the empty Orchestrator entry file.
+- `npm run demo-seller` — Run the empty demo-seller entry file.
