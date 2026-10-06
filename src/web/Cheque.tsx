@@ -14,14 +14,15 @@ function FieldValue({ signed, proposed, detail }: { signed: string; proposed?: s
   </span> : <><span className="value">{signed}</span>{detail && <span className="value asset">{detail}</span>}</>;
 }
 
-export function Cheque({ bundle, heading, presented, patternDigest = bundle.digest, stamp, actions }: {
-  bundle: MandateBundle; heading: ReactNode; presented?: { payee: string; amount: string };
-  patternDigest?: string; stamp?: ReactNode; actions?: ReactNode;
+export function Cheque({ bundle, heading, presented, patternDigest = bundle.digest, stamp, actions, signatureNote = "Signed with a test key on Cardano preprod" }: {
+  bundle: MandateBundle; heading: ReactNode; presented?: { payee: string; amount: string; asset?: string; network?: string };
+  patternDigest?: string; stamp?: ReactNode; actions?: ReactNode; signatureNote?: string;
 }) {
   const m = bundle.mandate;
-  const expiry = new Date(m.expiry * 1000).toISOString();
+  const expiryDate = new Date(m.expiry * 1000);
+  const expiry = Number.isNaN(expiryDate.getTime()) ? null : expiryDate.toISOString();
   const signature = bundle.coseSign1;
-  const humanAmount = (amount: string) => m.asset === "lovelace" ? `${atomicToDecimal(amount)} tADA` : amount;
+  const humanAmount = (amount: string, asset = m.asset) => asset === "lovelace" ? `${atomicToDecimal(amount)} tADA` : amount;
   return <article className={`cheque${presented ? " cheque-presented" : ""}`}>
     <svg className="guilloche-field" viewBox="0 0 600 600" aria-hidden="true">
       {guillochePaths(patternDigest).map((path, i) => <path key={i} d={path} />)}
@@ -30,17 +31,17 @@ export function Cheque({ bundle, heading, presented, patternDigest = bundle.dige
       {guillocheBorderPaths(patternDigest).map((path, i) => <path key={i} d={path} />)}
     </svg>
     <div className="cheque-content">
-      <div className="printed-legend"><span>AgentPay Guard</span><span className="value">{m.network}</span></div>
+      <div className="printed-legend"><span>AgentPay Guard</span><span className="value">{presented?.network ?? m.network}</span></div>
       {heading}
       <div className="cheque-fields">
         <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} /></div>
-        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${m.asset}`} /></div>
+        <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} /></div>
         {stamp && <div className="stamp-placement">{stamp}</div>}
         <div className="memo-line ruled-field"><span className="field-label">Memo</span><span className="value">{m.purpose}</span></div>
-        <div className="expiry-line ruled-field"><span className="field-label">Void after</span><time className="value" dateTime={expiry}>{expiry.slice(0, 10)} · 00:00 UTC</time></div>
+        <div className="expiry-line ruled-field"><span className="field-label">Void after</span>{expiry ? <time className="value" dateTime={expiry}>{expiry.slice(0, 10)} · {expiry.slice(11, 19)} UTC</time> : <span className="value">{m.expiry} Unix seconds</span>}</div>
         <div className="signature-block">
           <div className="ruled-field signature-line"><span className="field-label">CIP-8 signature</span><span className="value signature-short" title={signature}>{signature.slice(0, 26)}…{signature.slice(-26)}</span></div>
-          <p className="test-key-note">Signed with a test key on Cardano preprod</p>
+          <p className="test-key-note">{signatureNote}</p>
           {!presented && <CopySignature signature={signature} />}
         </div>
         {actions && <nav className="cheque-actions" aria-label="Get started">{actions}</nav>}

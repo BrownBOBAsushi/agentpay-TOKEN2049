@@ -1,0 +1,29 @@
+.page { max-width: 1440px; margin: auto; padding: 40px 6vw 80px; overflow-wrap: anywhere; }
+.page h1 { font-size: clamp(36px, 6vw, 64px); margin-bottom: 16px; }
+.page h2 { margin: 24px 0 16px; }
+.header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 420px); gap: 32px; align-items: center; margin: 32px 0; }
+.invalid { color: var(--stamp); font-weight: 700; }
+.diff { border-top: 1px solid var(--ink-2); padding: 24px 0; }
+.diff h3 { margin: 0 0 16px; }
+.diff > div { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: baseline; margin: 12px 0; }
+.diff :global(.value) { display: block; width: 100%; font-size: 28px; line-height: 1.5; }
+.diff del { text-decoration-color: var(--stamp); }
+.matching { color: var(--ink-2); }
+.matching > div { margin: 16px 0; }
+.matching dd { margin: 4px 0; }
+.cheques { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 48px 0; }
+.cheques :global(.cheque) { padding: 28px; }
+.cheques :global(.cheque-fields) { grid-template-columns: minmax(0, 1fr); }
+.cheques :global(.cheque-fields) > * { grid-area: auto; min-width: 0; }
+.cheques :global(.value) { font-size: 14px; }
+.cheques :global(.micr-line) { flex-wrap: wrap; }
+.anchor { border-top: 1px solid var(--ink-2); padding: 24px 0; }
+.digests > div { border-top: 1px solid var(--guilloche); padding: 16px 0; }
+.digests h2 { font-size: 18px; }
+.digests :global(.value) { display: block; margin-bottom: 12px; }
+@media (max-width: 760px) {
+  .page { padding: 24px 5vw 48px; }
+  .header, .cheques { grid-template-columns: minmax(0, 1fr); }
+  .header > :last-child { max-width: 360px; }
+  .diff :global(.value) { font-size: 22px; }
+}
