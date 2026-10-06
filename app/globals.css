@@ -30,7 +30,16 @@ h1 { font-size: clamp(2.2rem, 4.5vw, 5.6rem); line-height: 1.04; letter-spacing:
 h2 { font-size: clamp(2.4rem, 4.2vw, 4.6rem); line-height: 1.07; letter-spacing: -.025em; }
 h3 { font-size: clamp(1.5rem, 2.2vw, 2.4rem); line-height: 1.2; }
 p { max-width: 70ch; }
-.value { font-family: var(--font-values), monospace; font-variant-numeric: tabular-nums; font-size: 16px; overflow-wrap: anywhere; }
+/* All OCR-B values share literal glyph rendering, including IDs and hashes. */
+.value {
+  font-family: var(--font-values), monospace;
+  font-variant-numeric: tabular-nums;
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'clig' 0, 'dlig' 0, 'calt' 0;
+  font-kerning: none;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
 .opening { min-height: 100svh; display: flex; align-items: center; padding: 32px; }
 .cheque { width: 100%; position: relative; isolation: isolate; border: 1px solid var(--ink); padding: clamp(24px, 3vw, 48px); background: var(--paper); overflow: clip; }
 .cheque::after { content: ""; position: absolute; inset: 7px; border: 1px solid var(--guilloche); pointer-events: none; z-index: -1; }
