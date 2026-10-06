@@ -42,7 +42,7 @@
 - [x] Deploy MPS + worker + Postgres to Railway. Confirm a Task runs with laptop closed. (T-009; hosted rehearsal 01a1114c… completed in 11 s, EVIDENCE.md)
 
 ### M3 — Web (h14–h19)
-- [ ] `/mandate`: connect wallet, edit fields, sign, copy bundle. (T-013)
+- [x] `/mandate`: connect wallet, edit fields, sign, copy bundle. (T-013 merged; real-wallet signing = S3 pending; deploy pending)
 - [x] `/receipt/:id`: Verdict, Diff table, on-chain links (Cardanoscan preprod). (T-012 merged; live receipts verified locally; deploy pending)
 - [x] Landing: one-line promise, 3-step picture, link to Sokosumi listing. (T-011 merged 49da6ff; Sokosumi link waits for NEXT_PUBLIC_SOKOSUMI_LISTING_URL; deploy pending)
 
