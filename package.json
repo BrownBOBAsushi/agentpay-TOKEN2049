@@ -17,6 +17,7 @@
     "demo-seller": "tsx src/demo-seller/index.ts"
   },
   "dependencies": {
+    "@evolution-sdk/evolution": "0.5.17",
     "canonicalize": "5.1.0",
     "next": "16.3.8",
     "react": "19.3.0",
