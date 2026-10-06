@@ -1,0 +1,22 @@
+.page { max-width: 1500px; margin: auto; padding: 32px; overflow-wrap: anywhere; }
+.intro { margin: 24px 0; }
+.form { border: 0; padding: 0; margin: 0; min-width: 0; }
+.page :global(.payee-line), .page :global(.amount-box) { align-self: start; }
+.wallet { margin-bottom: 32px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; }
+.wallet h2 { font-size: 28px; width: 100%; margin: 0; }
+.wallet p { flex-basis: 100%; }
+.page input, .page select, .page textarea { font-size: 16px; color: var(--ink); background: var(--paper); border: 1px solid var(--ink-2); border-radius: 0; padding: 10px; min-height: 44px; max-width: 100%; }
+.page select:not(:global(.value)) { font-family: var(--font-prose), sans-serif; }
+.page input, .page textarea { width: 100%; }
+.page textarea { resize: vertical; }
+.page button { padding: 10px 16px; border: 1px solid var(--ink); background: var(--paper); min-height: 44px; }
+.page button[type="submit"] { background: var(--ink); color: var(--paper); }
+.page button:disabled { opacity: .65; }
+.page :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.error { display: block; color: var(--ink-2); font-size: 14px; margin-top: 8px; }
+.error:empty { display: none; }
+.nonce { margin-top: 32px; }
+.nonce input { width: min(100%, 440px); margin: 0 16px 8px 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 24px; }
+.status { margin: 24px 0 12px; }
+@media (max-width: 760px) { .page { padding: 20px 16px; } }

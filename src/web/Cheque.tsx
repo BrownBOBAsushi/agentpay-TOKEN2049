@@ -14,22 +14,39 @@ function FieldValue({ signed, proposed, detail }: { signed: string; proposed?: s
   </span> : <><span className="value">{signed}</span>{detail && <span className="value asset">{detail}</span>}</>;
 }
 
-export function Cheque({ bundle, heading, presented, patternDigest = bundle.digest, stamp, actions, signatureNote = "Signed with a test key on Cardano preprod" }: {
+type ReadChequeProps = {
   bundle: MandateBundle; heading: ReactNode; presented?: { payee: string; amount: string; asset?: string; network?: string };
   patternDigest?: string; stamp?: ReactNode; actions?: ReactNode; signatureNote?: string;
-}) {
+};
+type EditChequeProps = { edit: ReactNode; heading: ReactNode; patternDigest: string | null };
+
+function ChequePattern({ digest }: { digest: string }) {
+  return <>
+    <svg className="guilloche-field" viewBox="0 0 600 600" aria-hidden="true">
+      {guillochePaths(digest).map((path, i) => <path key={i} d={path} />)}
+    </svg>
+    <svg className="guilloche-border" viewBox="0 0 1200 600" preserveAspectRatio="none" aria-hidden="true">
+      {guillocheBorderPaths(digest).map((path, i) => <path key={i} d={path} />)}
+    </svg>
+  </>;
+}
+
+export function Cheque(props: ReadChequeProps | EditChequeProps) {
+  if ("edit" in props) return <article className="cheque">
+    {props.patternDigest && <ChequePattern digest={props.patternDigest} />}
+    <div className="cheque-content">
+      <div className="printed-legend"><span>AgentPay Guard</span><span className="value">cardano:preprod</span></div>
+      {props.heading}{props.edit}
+    </div>
+  </article>;
+  const { bundle, heading, presented, patternDigest = bundle.digest, stamp, actions, signatureNote = "Signed with a test key on Cardano preprod" } = props;
   const m = bundle.mandate;
   const expiryDate = new Date(m.expiry * 1000);
   const expiry = Number.isNaN(expiryDate.getTime()) ? null : expiryDate.toISOString();
   const signature = bundle.coseSign1;
   const humanAmount = (amount: string, asset = m.asset) => asset === "lovelace" ? `${atomicToDecimal(amount)} tADA` : amount;
   return <article className={`cheque${presented ? " cheque-presented" : ""}`}>
-    <svg className="guilloche-field" viewBox="0 0 600 600" aria-hidden="true">
-      {guillochePaths(patternDigest).map((path, i) => <path key={i} d={path} />)}
-    </svg>
-    <svg className="guilloche-border" viewBox="0 0 1200 600" preserveAspectRatio="none" aria-hidden="true">
-      {guillocheBorderPaths(patternDigest).map((path, i) => <path key={i} d={path} />)}
-    </svg>
+    <ChequePattern digest={patternDigest} />
     <div className="cheque-content">
       <div className="printed-legend"><span>AgentPay Guard</span><span className="value">{presented?.network ?? m.network}</span></div>
       {heading}

@@ -3,6 +3,10 @@
 import { useEffect, useId, useRef } from "react";
 
 const punches: Record<string, string[]> = {
+  S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+  I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+  G: ["01110", "10001", "10000", "10111", "10001", "10001", "01110"],
+  N: ["10001", "11001", "11001", "10101", "10011", "10011", "10001"],
   C: ["01110", "10001", "10000", "10000", "10000", "10001", "01110"],
   L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
   E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
@@ -12,7 +16,7 @@ const punches: Record<string, string[]> = {
 };
 
 export function Stamp({ variant = "returned", reasons = [], animate = false }: {
-  variant?: "returned" | "cleared"; reasons?: string[]; animate?: boolean;
+  variant?: "returned" | "cleared" | "signed"; reasons?: string[]; animate?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const spread = useRef<SVGAnimateElement>(null);
@@ -35,8 +39,8 @@ export function Stamp({ variant = "returned", reasons = [], animate = false }: {
     return () => { observer.disconnect(); motion.removeEventListener("change", reduce); };
   }, [animate, variant]);
 
-  if (variant === "cleared") return <svg className="stamp stamp-cleared" viewBox="0 0 264 58" role="img" aria-label="CLEARED">
-    {Array.from("CLEARED").flatMap((letter, index) => punches[letter].flatMap((row, y) => Array.from(row).flatMap((dot, x) => dot === "1"
+  if (variant === "cleared" || variant === "signed") return <svg className="stamp stamp-cleared" viewBox={`0 0 ${variant === "signed" ? 228 : 264} 58`} role="img" aria-label={variant === "signed" ? "SIGNED" : "CLEARED"}>
+    {Array.from(variant === "signed" ? "SIGNED" : "CLEARED").flatMap((letter, index) => punches[letter].flatMap((row, y) => Array.from(row).flatMap((dot, x) => dot === "1"
       ? [<circle key={`${index}-${x}-${y}`} cx={12 + index * 36 + x * 6} cy={10 + y * 6} r="1.9" />] : [])))}
   </svg>;
 
