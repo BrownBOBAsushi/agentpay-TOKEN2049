@@ -7,10 +7,10 @@ import { atomicToDecimal, groupAtomic } from "./amount";
 import type { ReceiptPageData, ReceiptRecord } from "./receipt-types";
 import styles from "./receipt.module.css";
 
-function DiffValue({ value, asset, struck = false }: { value: string; asset?: string; struck?: boolean }) {
+function DiffValue({ value, asset, struck = false, identifier = false }: { value: string; asset?: string; struck?: boolean; identifier?: boolean }) {
   const isAmount = asset && /^\d+$/.test(value);
   const main = isAmount && asset === "lovelace" ? `${atomicToDecimal(value)} tADA` : value;
-  const valueClass = /^(?:addr|stake)(?:_test)?1/i.test(main) || /^[a-f\d]{40,}$/i.test(main) ? styles.identifier : undefined;
+  const valueClass = identifier || /^(?:addr|stake)(?:_test)?1/i.test(main) || /^[a-f\d]{40,}$/i.test(main) ? styles.identifier : undefined;
   return <>
     {struck ? <del className={valueClass ? `value ${valueClass}` : "value"}>{main}</del> : <span className={valueClass ? `value ${valueClass}` : "value"}>{main}</span>}
     {isAmount && <small className={`value ${styles.atomic}`}>{groupAtomic(value)} {asset}</small>}
@@ -49,9 +49,9 @@ function SlipSettlement({ data }: { data: ReceiptRecord }) {
 function DiffRows({ data }: { data: ReceiptRecord }) {
   return <>
     {data.diff.length === 0 && <p>No differing fields in this Guard Receipt.</p>}
-    {data.diff.map((entry, index) => <div className={styles.diff} key={`${entry.field}-${index}`}>
-      <h3>{entry.field}</h3><div><span className="field-label">Signed</span><DiffValue value={entry.signed} asset={entry.field === "amount" ? data.bundle?.mandate.asset : undefined} /></div>
-      <div><span className={styles.invalid}>MUST NOT</span><span className="field-label">Presented</span><DiffValue value={entry.proposed} asset={entry.field === "amount" ? data.proposal?.requirements.asset : undefined} struck /></div>
+      {data.diff.map((entry, index) => <div className={styles.diff} key={`${entry.field}-${index}`}>
+      <h3>{entry.field}</h3><div><span className="field-label">Signed</span><DiffValue value={entry.signed} asset={entry.field === "amount" ? data.bundle?.mandate.asset : undefined} identifier={entry.field === "network"} /></div>
+      <div><span className={styles.invalid}>MUST NOT</span><span className="field-label">Presented</span><DiffValue value={entry.proposed} asset={entry.field === "amount" ? data.proposal?.requirements.asset : undefined} struck identifier={entry.field === "network"} /></div>
     </div>)}
   </>;
 }
@@ -101,7 +101,7 @@ export function ReceiptView({ data }: { data: ReceiptPageData }) {
           {data.example && <p>Illustrative example — signature, complete inputs and settlement evidence are unavailable.</p>}
           <p>{data.sentinelOk ? "Zero-digest rule valid" : "Zero-digest rule INVALID — APPROVE cannot use unavailable digests"}</p>
           <div className={styles.checked} aria-label="Checked fields"><h3>Checked</h3>
-            {data.matching.length === 0 ? <p>No matching fields are available.</p> : <ul>{data.matching.map((entry) => <li key={entry.field}><span className={styles.checkedLabel}><CheckedMark /><span>{entry.field} · matches</span></span><span className={styles.checkedValue}><DiffValue value={entry.signed} asset={entry.field === "amount" ? data.bundle?.mandate.asset : undefined} /></span></li>)}</ul>}
+            {data.matching.length === 0 ? <p>No matching fields are available.</p> : <ul>{data.matching.map((entry) => <li key={entry.field}><span className={styles.checkedLabel}><CheckedMark /><span>{entry.field} · matches</span></span><span className={styles.checkedValue}><DiffValue value={entry.signed} asset={entry.field === "amount" ? data.bundle?.mandate.asset : undefined} identifier={entry.field === "network"} /></span></li>)}</ul>}
           </div>
           <SlipSettlement data={data} />
         </section>

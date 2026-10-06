@@ -7,13 +7,12 @@ export function fitPencilRing(value: RingRect, wrapper: RingRect, padX = 14, pad
   const width = Math.max(24, value.width + padX * 2);
   const height = Math.max(24, value.height + padY * 2);
   return { left: value.left - wrapper.left - padX, top: value.top - wrapper.top - padY, width, height,
-    path: roundedRingPath(width, height) };
+    path: pencilEllipsePath(width, height) };
 }
 
-export function roundedRingPath(width: number, height: number) {
-  const inset = 2;
-  const radius = Math.min(18, width * .08, height * .24);
-  return `M ${inset + radius} ${inset + 1} C ${width * .28} ${inset}, ${width * .69} ${inset + 2}, ${width - inset - radius} ${inset} C ${width - inset} ${inset}, ${width - inset} ${inset + radius * .35}, ${width - inset} ${inset + radius} L ${width - inset - 1} ${height - inset - radius} C ${width - inset} ${height - inset - 2}, ${width - inset - radius * .3} ${height - inset}, ${width - inset - radius} ${height - inset} C ${width * .7} ${height - inset}, ${width * .3} ${height - inset - 1}, ${inset + radius} ${height - inset} C ${inset} ${height - inset}, ${inset} ${height - inset - radius * .3}, ${inset} ${height - inset - radius} L ${inset} ${inset + radius} C ${inset} ${inset + 1}, ${inset + radius * .3} ${inset}, ${inset + radius} ${inset + 1} Z`;
+export function pencilEllipsePath(width: number, height: number) {
+  const middle = height / 2;
+  return `M ${width + 1} ${middle} C ${width + 2} ${height * .22}, ${width * .78} -1, ${width * .5} 1 C ${width * .22} -1, -1 ${height * .22}, 1 ${middle} C -1 ${height * .78}, ${width * .22} ${height + 1}, ${width * .5} ${height - 1} C ${width * .78} ${height + 2}, ${width + 2} ${height * .78}, ${width + 1} ${middle} Z`;
 }
 
 export function PencilRing({ fit = false }: { fit?: boolean }) {
@@ -47,7 +46,7 @@ export function PencilRing({ fit = false }: { fit?: boolean }) {
   }, [fit]);
   return <svg ref={svgRef} className="pencil-ring" data-fit={fit || undefined} viewBox="0 0 300 100" preserveAspectRatio="none" aria-hidden="true">
     <defs><filter id={id} x="-4%" y="-8%" width="108%" height="116%"><feTurbulence type="fractalNoise" baseFrequency=".08" numOctaves="2" result="rough" /><feDisplacementMap in="SourceGraphic" in2="rough" scale=".45" /></filter></defs>
-    <path ref={pathRef} pathLength="1" filter={`url(#${id})`} d={roundedRingPath(300, 100)} />
+    <path ref={pathRef} pathLength="1" filter={`url(#${id})`} d={pencilEllipsePath(300, 100)} />
   </svg>;
 }
 export function ReturnItem({ reasons, children, title = "RETURN ITEM · AgentPay Guard · Guard Check", label = "Return Item", className = "" }: { reasons: string[]; children?: ReactNode; title?: string; label?: string; className?: string }) {

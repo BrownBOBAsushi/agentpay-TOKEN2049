@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
 import { landingBundle, landingProposal, landingVerdict } from "./landing";
 import { ReceiptView } from "./ReceiptView";
-import { fitPencilRing, roundedRingPath } from "./LandingScene";
+import { fitPencilRing, pencilEllipsePath } from "./LandingScene";
 import MandatePage from "../../app/mandate/page";
 import type { ReceiptRecord } from "./receipt-types";
 
@@ -81,7 +81,7 @@ test("mandate starts as an editable cheque with a blank stub and teller note", (
   expect(html).not.toContain("stub-signed"); expect(html).not.toContain('aria-label="SIGNED on cheque stub"');
 });
 
-test("pencil ring geometry follows the local value box and stays inside its padded envelope", () => {
+test("pencil ellipse follows the local value box with only slight overshoot", () => {
   const localValue = { left: 14, top: 14, width: 120, height: 36 };
   const geometry = fitPencilRing(localValue, { left: 0, top: 0, width: 148, height: 64 });
   expect(geometry).toMatchObject({ left: 0, top: 0, width: 148, height: 64 });
@@ -90,12 +90,19 @@ test("pencil ring geometry follows the local value box and stays inside its padd
   const coordinates = geometry.path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
   expect(coordinates.length).toBeGreaterThan(10);
   for (let index = 0; index < coordinates.length; index += 2) {
-    expect(coordinates[index]).toBeGreaterThanOrEqual(0);
-    expect(coordinates[index]).toBeLessThanOrEqual(geometry.width);
-    expect(coordinates[index + 1]).toBeGreaterThanOrEqual(0);
-    expect(coordinates[index + 1]).toBeLessThanOrEqual(geometry.height);
+    expect(coordinates[index]).toBeGreaterThanOrEqual(-2);
+    expect(coordinates[index]).toBeLessThanOrEqual(geometry.width + 2);
+    expect(coordinates[index + 1]).toBeGreaterThanOrEqual(-2);
+    expect(coordinates[index + 1]).toBeLessThanOrEqual(geometry.height + 2);
   }
-  expect(roundedRingPath(geometry.width, geometry.height)).toBe(geometry.path);
+  expect(pencilEllipsePath(geometry.width, geometry.height)).toBe(geometry.path);
+});
+
+test("Checked network identifier is marked to wrap within its slip value cell", () => {
+  const html = render({ ...base, matching: [{
+    field: "network", signed: "cardano:preprod", proposed: "cardano:preprod",
+  }] });
+  expect(html).toMatch(/<span class="[^"]*checkedValue[^"]*"><span class="value [^"]*identifier[^"]*">cardano:preprod<\/span><\/span>/);
 });
 
 test("Checked amount keeps its human and atomic values in one value cell", () => {
