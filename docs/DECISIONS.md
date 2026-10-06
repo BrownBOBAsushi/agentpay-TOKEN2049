@@ -110,3 +110,16 @@
   it as "unavailable". The Receipt schema stays `v:1` (no new field).
 - **Why:** T-007 review asked for an honest marker. A sentinel keeps the signed format stable.
 - **Status:** Accepted.
+
+## DEC-T13 — Paid Task deadlines fit MPS confirmation depth
+- **Date:** 2026-10-06
+- **Decision:** Replace the DEC-T09 (S4) offsets. From the terms request: `payByTime` +20 min,
+  `submitResultTime` +60 min, `unlockTime` +75 min, `externalDisputeUnlockTime` +90 min. The
+  offsets are Worker config (`PAID_*_MINUTES`) with these defaults.
+- **Why:** Live paid Task `01a11072-5686-778f-a89b-65066d640295` failed. The buyer locked on time
+  (tx `38ff135b99952146…`, 09:05:05 UTC, block 5260035, 1 tUSDM, our inputHash), but local MPS uses
+  `BLOCK_CONFIRMATIONS_THRESHOLD=20` and `CHECK_TX_INTERVAL=180` (from its `.env.example`). It
+  could not see the lock before payBy + 300 s grace and marked the payment `FundsOrDatumInvalid`.
+  20 preprod blocks took ~9.5 min that day. The demo's +5 min payBy needs a faster MPS. Lowering
+  the MPS threshold is the human's choice (it weakens rollback safety); wider offsets work either way.
+- **Status:** Accepted.
