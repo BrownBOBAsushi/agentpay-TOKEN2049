@@ -1,8 +1,11 @@
 import { PGlite } from "@electric-sql/pglite";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { createSessionLock, withWorkerLock } from "./lock";
 import { formatWorkerFailure } from "./errors";
 import { spawnSync } from "node:child_process";
+
+// PGlite start-up and the subprocess probes exceed 5 s when the full suite runs in parallel.
+vi.setConfig({ testTimeout: 30_000 });
 
 test("dedicated session acquires and releases the shared bigint advisory lock", async () => {
   const db = new PGlite();

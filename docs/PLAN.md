@@ -44,7 +44,7 @@
 ### M3 — Web (h14–h19)
 - [ ] `/mandate`: connect wallet, edit fields, sign, copy bundle. (T-013)
 - [ ] `/receipt/:id`: Verdict, Diff table, on-chain links (Cardanoscan preprod). (T-012)
-- [ ] Landing: one-line promise, 3-step picture, link to Sokosumi listing. (T-011; design: Returned Cheque, .impeccable/surfaces/app-page-tsx.md)
+- [x] Landing: one-line promise, 3-step picture, link to Sokosumi listing. (T-011 merged 49da6ff; Sokosumi link waits for NEXT_PUBLIC_SOKOSUMI_LISTING_URL; deploy pending)
 
 ### M4 — Demo Orchestrator + x402 (h19–h25)
 - [ ] demo-seller: x402-paid route on preprod (template `x402-express`).
