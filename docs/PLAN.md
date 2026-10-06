@@ -21,7 +21,7 @@
 - [ ] Blockfrost preprod key. Postgres + MPS running locally on :3012, health OK.
 - [ ] Fund selling wallet + Orchestrator wallet from dispenser.masumi.network.
 - [ ] Register agent in MPS admin (Dynamic pricing). Mint takes 5–15 min: start it, move on.
-- [ ] Repo scaffold: Next.js + `src/` + tsconfig + lint + vitest. `.env.example` filled.
+- [x] Repo scaffold: Next.js + `src/` + tsconfig + lint + vitest (T-001, merge 8ffcf5a; typecheck/lint/test/build green). `.env.example` still to fill (T-005).
 
 ### M1 — guard-core (h3–h8)
 - [ ] Mandate schema (zod), JCS, digest. Unit tests.
