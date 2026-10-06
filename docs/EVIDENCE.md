@@ -41,8 +41,8 @@
 | Paid Task attempt 1 (failed) | `01a1106d-916d-70dd-9798-95c556a24303` · MPS `POST /payment` HTTP 400 (empty-string seller collectionAddress); nothing created; fixed by human PATCH 09:0x UTC | — |
 | Paid Task attempt 2 (failed) | `01a11072-5686-778f-a89b-65066d640295` · terms + masumiPayment OK (Core tx `01a11072-d814-772f-8bc5-442e59d99a4f`, 100 credits); buyer lock tx `38ff135b99952146a6c268e4cd1cc106f0c646587bf95b45bb89050d388b1bfc` 09:05:05 UTC block 5260035 (1 tUSDM, our inputHash); MPS timed out before 20 confirmations → `FundsOrDatumInvalid` (DEC-T13). No result submitted; buyer refund path applies | https://preprod.cardanoscan.io/transaction/38ff135b99952146a6c268e4cd1cc106f0c646587bf95b45bb89050d388b1bfc |
 | Worker lock on real Postgres (T-010) | 2026-10-06: Worker holds 1 advisory lock; 2nd Worker → `worker_failed LockError`; reconcile while Worker up → `worker-running`; after stop → 0 locks; reconcile then → `not-pending` and releases | local `masumi-pg`, `pg_locks` |
-| Paid Task ID | | |
-| Payment tx | | |
-| Result hash | | |
+| Paid Task ID | `01a110bb-e6aa-74a2-953c-269254af16ce` · COMPLETED 10:49 UTC 2026-10-06 · APPROVE Guard Receipt, `verifyReceipt` true · all 6 side effects once | Core `GET /v1/tasks/{id}/events` |
+| Payment (escrow lock) tx | `5001490300711c641bddb77ea1e49c611176b495b591ffc268878e4b299a6dec` · Confirmed FundsLocked · 1 tUSDM | https://preprod.cardanoscan.io/transaction/5001490300711c641bddb77ea1e49c611176b495b591ffc268878e4b299a6dec |
+| Result hash | `49bf447d44c7ea9f1460aff726b5b53d6a82fa8634e98f42a1533ec698589c6f` = sha256(COMPLETED result) = MPS on-chain resultHash · result tx `a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32` Confirmed ResultSubmitted (submitted 10:37, deadline 11:22) | https://preprod.cardanoscan.io/transaction/a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32 |
 | Collection tx | | |
 | Net tUSDM received | | |
