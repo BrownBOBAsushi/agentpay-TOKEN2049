@@ -5,12 +5,13 @@ function digestRandom(digestHex: string) {
   return () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
 }
 
-export function guillochePaths(digestHex: string, opts: { size?: number; lines?: number } = {}): string[] {
+export function guillochePaths(digestHex: string, opts: { size?: number; lines?: number; ratio?: number } = {}): string[] {
   const random = digestRandom(digestHex);
   const size = opts.size ?? 600;
   const lines = opts.lines ?? 40 + Math.floor(random() * 31);
   if (!Number.isFinite(size) || size <= 0 || !Number.isInteger(lines) || lines < 40 || lines > 70) throw new Error("Invalid rosette dimensions");
-  const ratio = 5 + Math.floor(random() * 7);
+  const ratio = opts.ratio ?? 5 + Math.floor(random() * 7);
+  if (!Number.isInteger(ratio) || ratio < 5 || ratio > 12) throw new Error("Invalid rosette ratio");
   const phase = random() * Math.PI * 2;
   const pen = size * (.13 + random() * .04);
   const orbit = size * .27;
@@ -26,6 +27,28 @@ export function guillochePaths(digestHex: string, opts: { size?: number; lines?:
     });
     return points.join(" ") + " Z";
   });
+}
+
+export function twoInkGuilloche(digestHex: string) {
+  const random = digestRandom(digestHex);
+  const firstRatio = 5 + Math.floor(random() * 3);
+  // The bronze plate has its own seed, taken only from the second half.
+  const secondHalf = digestHex.slice(32).repeat(2);
+  const secondRatio = 8 + Math.floor(digestRandom(secondHalf)() * 4);
+  return {
+    sage: guillochePaths(digestHex, { ratio: firstRatio }),
+    bronze: guillochePaths(secondHalf, { ratio: secondRatio }),
+    firstLobes: firstRatio + 1, secondLobes: secondRatio + 1,
+  };
+}
+
+// One 64px repeat of four phase-shifted sine strands within a 9px strip.
+export function guillocheWaveStrands(vertical = false): string[] {
+  return Array.from({ length: 4 }, (_, strand) => Array.from({ length: 129 }, (_, point) => {
+    const along = point / 128 * 64;
+    const across = 4.5 + 4 * Math.sin(point / 128 * 2 * Math.PI + strand * Math.PI / 2);
+    return `${point ? "L" : "M"}${(vertical ? across : along).toFixed(3)},${(vertical ? along : across).toFixed(3)}`;
+  }).join(" "));
 }
 
 export function guillocheBorderPaths(digestHex: string): string[] {
