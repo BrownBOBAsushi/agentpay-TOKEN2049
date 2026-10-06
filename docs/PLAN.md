@@ -9,9 +9,9 @@
 | ID | Question | How to test | Fallback if no |
 |---|---|---|---|
 | S1 | Does the hosted x402 facilitator accept a tx with metadata label 674? | Build a 1 tADA x402 payment with `attachMetadata({label:674n})`, send to facilitator. | Drop the metadata link; bind by putting the proposal tx id in the Receipt only. |
-| S2 | Exact `masumiPayment` JSON and the signed-seller-terms call | `curl :3012/api-docs`, `sokosumi skills`, read `masumi-network/demo-agent-token2049`. | Ask a Masumi mentor on Telegram. |
+| S2 ✅ DEC-T09 | Exact `masumiPayment` JSON and the signed-seller-terms call | `curl :3012/api-docs`, `sokosumi skills`, read `masumi-network/demo-agent-token2049`. | Ask a Masumi mentor on Telegram. |
 | S3 | CIP-30 `signData` return shape in Lace and Eternl | Tiny page: sign `JCS(mandate)`, verify with evolution-sdk. | Use one wallet only in the demo. |
-| S4 | Can signed terms use a short `unlockTime` for the demo? | Read terms API from S2. | Show escrow lock + result hash; show collection later in the write-up. |
+| S4 ✅ DEC-T09 (yes, seller sets it) | Can signed terms use a short `unlockTime` for the demo? | Read terms API from S2. | Show escrow lock + result hash; show collection later in the write-up. |
 
 ## Milestones
 
@@ -36,10 +36,10 @@
 - [x] Guard Receipt sign/verify with Guard Key. (T-005, 140 tests green; review APPROVE 9b33951)
 
 ### M2 — Worker and paid Task (h8–h14)
-- [ ] Free rehearsal Task: `runtime start` → Guard Check → `runtime complete`.
-- [ ] Idempotency table `{taskId, eventId, action}`.
-- [ ] Paid Task end to end: masumiPayment → FundsLocked → result hash → complete. Save tx hashes.
-- [ ] Deploy MPS + worker + Postgres to Railway. Confirm a Task runs with laptop closed.
+- [ ] Free rehearsal Task: `runtime start` → Guard Check → `runtime complete`. (T-007)
+- [ ] Idempotency table `{taskId, eventId, action}`. (T-006)
+- [ ] Paid Task end to end: masumiPayment → FundsLocked → result hash → complete. Save tx hashes. (T-008)
+- [ ] Deploy MPS + worker + Postgres to Railway. Confirm a Task runs with laptop closed. (T-009, blocked: Railway account)
 
 ### M3 — Web (h14–h19)
 - [ ] `/mandate`: connect wallet, edit fields, sign, copy bundle.

@@ -53,3 +53,51 @@
   source of ideas only. Do not copy files from it.
 - **Why:** Track rule: "Projects must be built entirely during the 36-hour hackathon."
 - **Status:** Accepted.
+
+## DEC-T09 — Seller flow API shapes (answers SPIKE S2 and S4)
+- **Date:** 2026-10-06
+- **Decision:** Follow the organisers' live demo `masumi-network/demo-agent-token2049`, branch
+  `live-demo-name-finder`, file `live-team-names-20261006/paid-task.mjs` (reached confirmed
+  `ResultSubmitted` on preprod). Shapes:
+  - Signed seller terms: MPS `POST /api/v1/payment` (header `token: <MPS runtime token>`) with
+    `{network:"Preprod", agentIdentifier, paymentSourceType:"Web3CardanoV2",
+    supportedPaymentSourceIndex, inputHash, identifierFromPurchaser, RequestedFunds:[{amount,unit}],
+    payByTime, submitResultTime, unlockTime, externalDisputeUnlockTime (ISO strings), metadata}`.
+    Response `{status:"success", data:<payment>}`.
+  - `masumiPayment`: Core `POST /v1/tasks/{id}/events` with `{comment, masumiPayment:{blockchainIdentifier,
+    agentIdentifier, sellerVkey, submitResultTime, payByTime, unlockTime, externalDisputeUnlockTime,
+    inputHash, identifierFromPurchaser, paymentSourceType, supportedPaymentSourceIndex,
+    Amounts:[{amount,unit}], PaymentSource:{network, smartContractAddress, policyId}}}`, built from
+    the MPS payment (refuse if `sellerReturnAddress` is not null).
+  - Escrow state: MPS `POST /api/v1/payment/resolve-blockchain-identifier`
+    `{network, blockchainIdentifier, includeHistory:"true"}`; proceed only on `onChainState`
+    `FundsLocked` with a `Confirmed` transaction to that state.
+  - Result: MPS `POST /api/v1/payment/submit-result {network, blockchainIdentifier, submitResultHash}`.
+  - Complete: Core `POST /v1/tasks/{id}/events {status:"COMPLETED", comment:<result>}`.
+  - Settlement: Core `GET /v1/tasks/{id}/receipt` (`settled`, `txHash`).
+  - S4: the seller sets `unlockTime` itself in `POST /payment`. Use the demo offsets:
+    payBy +5 min, submitResult +20 min, unlock +36 min, externalDisputeUnlock +52 min.
+- **Transport:** call Core over HTTPS with `Authorization: Bearer $SOKOSUMI_COWORKER_API_KEY`
+  (base `https://api.preprod.sokosumi.com`), not through the `sokosumi` CLI. orch checked
+  2026-10-06: `GET /v1/coworkers/me`, `/v1/coworkers/me/events`, `/v1/tasks?coworkerId=` all
+  return 200 with the coworker key. Why: the hosted worker has no OS vault, and CLI OAuth expires
+  after ~1 hour (`docs/OPS.md`).
+- **Status:** Accepted. Replaces the "SPIKE S2" marks in `ARCHITECTURE.md`.
+
+## DEC-T10 — Result hash is SHA-256 of the exact UTF-8 result
+- **Date:** 2026-10-06
+- **Decision:** `inputHash = sha256(utf8(task description))` and
+  `submitResultHash = sha256(utf8(result text))`, 64 hex, as in the demo (DEC-T09).
+  This replaces the MIP-004 `inputHash ‖ outputHash` form in `ARCHITECTURE.md` step 7.
+- **Why:** The demo form is proven on preprod (`ResultSubmitted` confirmed). The MIP-004 form is
+  from older skill docs and is not proven with MPS on :3012.
+- **Status:** Accepted.
+
+## DEC-T11 — Guard Task input, output, and nonce use
+- **Date:** 2026-10-06
+- **Decision:** The Task description is UTF-8 JSON `{"mandateBundle":…, "proposal":…}`. The Task
+  result is the JSON of the signed Guard Receipt (`signReceipt` output). A Mandate nonce is
+  *consumed* only by an `APPROVE` (one Mandate pays once). A `REFUSE` does not consume it. The
+  nonce row stores the Task ID, so re-running the same Task is not `NONCE_REUSED`.
+- **Why:** A refused attack must not burn the human's Mandate; an approved one must not pay twice.
+- **Status:** Accepted.

@@ -62,7 +62,7 @@
 5. **Verdict.** `APPROVE` or `REFUSE` + reason codes + Diff.
 6. **Receipt.** Guard Receipt = `{verdict, diff, mandateDigest, proposalDigest, taskId, ts}`,
    signed by the Guard Key (CIP-8). Receipt text is the Task result.
-7. **On chain.** Worker submits `submitResultHash = inputHash ‖ outputHash` (MIP-004) to MPS.
+7. **On chain.** Worker submits `submitResultHash = sha256(result)` to MPS (DEC-T10).
    The Receipt is now anchored on Cardano by Masumi's decision log.
 8. **Pay or stop.** Orchestrator pays via x402 only on APPROVE. On REFUSE it stops and shows
    the Diff. No human is needed for the block.
