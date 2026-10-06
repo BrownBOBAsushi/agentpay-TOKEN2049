@@ -38,6 +38,8 @@
 | Rehearsal Task ID (S2, injection) | `01a10ff9-5009-73d6-903e-7a5effdb30d0` · COMPLETED · REFUSE `PAYEE_MISMATCH`+`AMOUNT_MISMATCH`, 2-field Diff, `verifyReceipt` true · sha256(result) `fb5b5fbe1e76db3ec14f1ee82d8d70cc73a51cc0f4975aeb033bf7bddd092693` · 2026-10-06 | Core `GET /v1/tasks/{id}/events` |
 | Restart idempotency | Worker stopped and restarted after both Tasks: each still `CREATED → READY → RUNNING → COMPLETED` (one RUNNING, one COMPLETED); 6 `side_effect` rows unchanged | local Postgres |
 | Guard address (Receipt signer, holds no funds) | `addr_test1vq0v5s74k40pqnpqqfqkmkyaez8wh4fraq6vex69cly6krqvq9qx4` | |
+| Paid Task attempt 1 (failed) | `01a1106d-916d-70dd-9798-95c556a24303` · MPS `POST /payment` HTTP 400 (empty-string seller collectionAddress); nothing created; fixed by human PATCH 09:0x UTC | — |
+| Paid Task attempt 2 (failed) | `01a11072-5686-778f-a89b-65066d640295` · terms + masumiPayment OK (Core tx `01a11072-d814-772f-8bc5-442e59d99a4f`, 100 credits); buyer lock tx `38ff135b99952146a6c268e4cd1cc106f0c646587bf95b45bb89050d388b1bfc` 09:05:05 UTC block 5260035 (1 tUSDM, our inputHash); MPS timed out before 20 confirmations → `FundsOrDatumInvalid` (DEC-T13). No result submitted; buyer refund path applies | https://preprod.cardanoscan.io/transaction/38ff135b99952146a6c268e4cd1cc106f0c646587bf95b45bb89050d388b1bfc |
 | Paid Task ID | | |
 | Payment tx | | |
 | Result hash | | |
