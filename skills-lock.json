@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "masumi": {
+      "source": "masumi-network/masumi-skills",
+      "sourceType": "github",
+      "skillPath": "skill/SKILL.md",
+      "computedHash": "f3668aed18072f2e9052d9a3814c6cdaa094087ed3774f86b6b1537cea7047c9"
+    }
+  }
+}
