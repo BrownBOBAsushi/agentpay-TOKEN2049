@@ -34,7 +34,10 @@
 
 | Item | Value | Explorer |
 |---|---|---|
-| Rehearsal Task ID | | |
+| Rehearsal Task ID (S1, match) | `01a10ff8-7fe1-7189-bb49-36777acc73cf` · COMPLETED · APPROVE Receipt, `verifyReceipt` true · sha256(result) `ecddae7d6a5ca2444c573cea9c73782ac0ac286b1345f9ef209150c9582f0a20` · 2026-10-06 | Core `GET /v1/tasks/{id}/events` |
+| Rehearsal Task ID (S2, injection) | `01a10ff9-5009-73d6-903e-7a5effdb30d0` · COMPLETED · REFUSE `PAYEE_MISMATCH`+`AMOUNT_MISMATCH`, 2-field Diff, `verifyReceipt` true · sha256(result) `fb5b5fbe1e76db3ec14f1ee82d8d70cc73a51cc0f4975aeb033bf7bddd092693` · 2026-10-06 | Core `GET /v1/tasks/{id}/events` |
+| Restart idempotency | Worker stopped and restarted after both Tasks: each still `CREATED → READY → RUNNING → COMPLETED` (one RUNNING, one COMPLETED); 6 `side_effect` rows unchanged | local Postgres |
+| Guard address (Receipt signer, holds no funds) | `addr_test1vq0v5s74k40pqnpqqfqkmkyaez8wh4fraq6vex69cly6krqvq9qx4` | |
 | Paid Task ID | | |
 | Payment tx | | |
 | Result hash | | |

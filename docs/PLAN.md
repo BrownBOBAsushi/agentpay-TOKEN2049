@@ -36,7 +36,7 @@
 - [x] Guard Receipt sign/verify with Guard Key. (T-005, 140 tests green; review APPROVE 9b33951)
 
 ### M2 — Worker and paid Task (h8–h14)
-- [ ] Free rehearsal Task: `runtime start` → Guard Check → `runtime complete`. (T-007)
+- [x] Free rehearsal Task: `runtime start` → Guard Check → `runtime complete`. (T-007; S1 APPROVE + S2 REFUSE live on preprod, restart-safe — `docs/EVIDENCE.md`)
 - [x] Idempotency table `{taskId, eventId, action}`. (T-006, 152 tests green on PGlite; review APPROVE 1b3e1e9; real Postgres checked at T-007 run)
 - [ ] Paid Task end to end: masumiPayment → FundsLocked → result hash → complete. Save tx hashes. (T-008)
 - [ ] Deploy MPS + worker + Postgres to Railway. Confirm a Task runs with laptop closed. (T-009, blocked: Railway account)
