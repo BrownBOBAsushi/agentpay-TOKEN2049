@@ -11,14 +11,16 @@ export async function runFreeFlow(input: {
   const log = (stage: string) => input.log?.(stage, task.id);
   const key = (action: string) => ({ taskId: task.id, eventId: "-", action });
   let journal = await store.readJournal(task.id);
+  if (journal && journal.mode !== "free") throw new Error("Task belongs to paid flow");
   if (journal?.stage === "complete") return;
   if (!journal && task.status === "RUNNING") { log("unowned"); return; }
   if (!["READY", "RUNNING", "COMPLETED"].includes(task.status)) return;
   if (!journal) {
     if (task.status !== "READY") return;
     // Record ownership before posting RUNNING, including the restart input.
-    await store.writeJournal(task.id, "ready", { description: task.description ?? "" });
+    await store.createJournal(task.id, "ready", { description: task.description ?? "" }, "free");
     journal = await store.readJournal(task.id);
+    if (journal?.mode !== "free") throw new Error("Task belongs to paid flow");
   }
   if (!["ready", "start", "check"].includes(journal!.stage)) throw new Error("Unknown Task journal stage");
   let result: string;

@@ -28,7 +28,7 @@ test("migration runs twice and preserves existing data", async () => {
   await store.writeJournal("task-a", "started", { count: 1 });
   await migrate(db);
   await migrate(db);
-  expect(await store.readJournal("task-a")).toEqual({ taskId: "task-a", stage: "started", data: { count: 1 } });
+  expect(await store.readJournal("task-a")).toEqual({ taskId: "task-a", stage: "started", data: { count: 1 }, mode: "free" });
 });
 
 test("once persists its result and a new store instance does not run it again", async () => {
@@ -130,6 +130,6 @@ test("journal upserts stage and data without changing other tasks", async () => 
   await store.writeJournal("task-a", "pending", { text: "quotes ' and Unicode é" });
   await store.writeJournal("task-b", "started", [1, 2]);
   await store.writeJournal("task-a", "done", { result: "saved" });
-  expect(await store.readJournal("task-a")).toEqual({ taskId: "task-a", stage: "done", data: { result: "saved" } });
-  expect(await store.readJournal("task-b")).toEqual({ taskId: "task-b", stage: "started", data: [1, 2] });
+  expect(await store.readJournal("task-a")).toEqual({ taskId: "task-a", stage: "done", data: { result: "saved" }, mode: "free" });
+  expect(await store.readJournal("task-b")).toEqual({ taskId: "task-b", stage: "started", data: [1, 2], mode: "free" });
 });

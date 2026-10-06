@@ -24,4 +24,5 @@ export async function migrate(db: Db): Promise<void> {
     data jsonb NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now()
   )`);
+  await db.query("ALTER TABLE task_journal ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT 'free' CHECK (mode IN ('free', 'paid'))");
 }

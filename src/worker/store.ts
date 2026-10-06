@@ -1,7 +1,8 @@
 import type { Db } from "./db";
 
 export type SideEffectKey = { taskId: string; eventId: string; action: string };
-export type JournalEntry<T = unknown> = { taskId: string; stage: string; data: T };
+export type TaskMode = "free" | "paid";
+export type JournalEntry<T = unknown> = { taskId: string; stage: string; data: T; mode: TaskMode };
 
 export class UncertainSideEffectError extends Error {
   constructor() {
@@ -80,16 +81,21 @@ export function createStore(db: Db) {
 
     async readJournal<T = unknown>(taskId: string): Promise<JournalEntry<T> | null> {
       const result = await db.query<JournalEntry<T>>(
-        'SELECT task_id AS "taskId", stage, data FROM task_journal WHERE task_id = $1', [taskId],
+        'SELECT task_id AS "taskId", stage, data, mode FROM task_journal WHERE task_id = $1', [taskId],
       );
       return result.rows[0] ?? null;
     },
 
-    async writeJournal(taskId: string, stage: string, data: unknown): Promise<void> {
+    async createJournal(taskId: string, stage: string, data: unknown, mode: TaskMode): Promise<void> {
+      await db.query("INSERT INTO task_journal (task_id, stage, data, mode) VALUES ($1, $2, $3::jsonb, $4) ON CONFLICT (task_id) DO NOTHING",
+        [taskId, stage, serialize(data), mode]);
+    },
+
+    async writeJournal(taskId: string, stage: string, data: unknown, mode: TaskMode = "free"): Promise<void> {
       await db.query(
-        `INSERT INTO task_journal (task_id, stage, data) VALUES ($1, $2, $3::jsonb)
+        `INSERT INTO task_journal (task_id, stage, data, mode) VALUES ($1, $2, $3::jsonb, $4)
          ON CONFLICT (task_id) DO UPDATE SET stage = EXCLUDED.stage, data = EXCLUDED.data, updated_at = now()`,
-        [taskId, stage, serialize(data)],
+        [taskId, stage, serialize(data), mode],
       );
     },
   };
