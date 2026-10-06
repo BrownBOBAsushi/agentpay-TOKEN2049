@@ -11,3 +11,5 @@ export type { SpendProposal, X402Requirements } from "./proposal";
 export type { ReasonCode, DiffEntry, Verdict } from "./verdict";
 export { matchX402 } from "./match-x402";
 export { guardCheck } from "./check";
+export { proposalDigest, receiptDigest, signReceipt, verifyReceipt } from "./receipt";
+export type { GuardReceipt, SignedReceipt } from "./receipt";
