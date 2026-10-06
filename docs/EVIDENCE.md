@@ -44,5 +44,5 @@
 | Paid Task ID | `01a110bb-e6aa-74a2-953c-269254af16ce` · COMPLETED 10:49 UTC 2026-10-06 · APPROVE Guard Receipt, `verifyReceipt` true · all 6 side effects once | Core `GET /v1/tasks/{id}/events` |
 | Payment (escrow lock) tx | `5001490300711c641bddb77ea1e49c611176b495b591ffc268878e4b299a6dec` · Confirmed FundsLocked · 1 tUSDM | https://preprod.cardanoscan.io/transaction/5001490300711c641bddb77ea1e49c611176b495b591ffc268878e4b299a6dec |
 | Result hash | `49bf447d44c7ea9f1460aff726b5b53d6a82fa8634e98f42a1533ec698589c6f` = sha256(COMPLETED result) = MPS on-chain resultHash · result tx `a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32` Confirmed ResultSubmitted (submitted 10:37, deadline 11:22) | https://preprod.cardanoscan.io/transaction/a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32 |
-| Collection tx | | |
-| Net tUSDM received | | |
+| Collection tx | `8ef677dc278f4f11a4a15c3fd4af80394e3b13626c7cecb4ade2abee74bc1526` · block 5260473 · 11:48:28 UTC · MPS auto-withdraw after unlock 11:37 · Core receipt `Withdrawn`, `settled: true`, same txHash | https://preprod.cardanoscan.io/transaction/8ef677dc278f4f11a4a15c3fd4af80394e3b13626c7cecb4ade2abee74bc1526 |
+| Net tUSDM received | **1.000000 tUSDM** (1000000 atomic, unit `16a55b2a…0014df10745553444d`) at selling address `addr_test1qzh3ask7…ct29t8`, measured as outputs − inputs in the collection tx via Blockfrost; seller net lovelace −3638695 (tx fee 673175) | Blockfrost `GET /txs/{hash}/utxos` |

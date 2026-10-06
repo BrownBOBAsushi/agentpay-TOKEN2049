@@ -38,7 +38,7 @@
 ### M2 — Worker and paid Task (h8–h14)
 - [x] Free rehearsal Task: `runtime start` → Guard Check → `runtime complete`. (T-007; S1 APPROVE + S2 REFUSE live on preprod, restart-safe — `docs/EVIDENCE.md`)
 - [x] Idempotency table `{taskId, eventId, action}`. (T-006, 152 tests green on PGlite; review APPROVE 1b3e1e9; real Postgres checked at T-007 run)
-- [x] Paid Task end to end: masumiPayment → FundsLocked → result hash → complete. Save tx hashes. (T-008/T-010; Task 01a110bb… COMPLETED, lock + result tx in EVIDENCE.md; collection pending unlock 11:37 UTC)
+- [x] Paid Task end to end: masumiPayment → FundsLocked → result hash → complete. Save tx hashes. (T-008/T-010; Task 01a110bb… COMPLETED, lock + result tx in EVIDENCE.md; collected 11:48 UTC, net 1.0 tUSDM)
 - [ ] Deploy MPS + worker + Postgres to Railway. Confirm a Task runs with laptop closed. (T-009, blocked: Railway account)
 
 ### M3 — Web (h14–h19)
