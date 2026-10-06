@@ -14,8 +14,8 @@ export interface LockClient {
   on(event: "error" | "end", listener: () => void): unknown;
 }
 export class LockError extends WorkerError {
-  constructor() {
-    super("another worker or reconcile holds the lock");
+  constructor(message: "another worker or reconcile holds the lock" | "lock instance already in use" = "another worker or reconcile holds the lock") {
+    super(message);
     this.name = "LockError";
   }
 }
@@ -24,32 +24,46 @@ export function createWorkerLock(databaseUrl: string): WorkerLock {
   return createSessionLock(new Client({ connectionString: databaseUrl }));
 }
 
-export function createSessionLock(client: LockClient): WorkerLock {
-  let held = false;
-  let closed = false;
-  // A lost lock session must end the process, not leave an unfenced Worker running.
-  client.on("error", () => { process.exitCode = 1; if (held) process.exit(1); });
-  client.on("end", () => { if (held && !closed) process.exit(1); });
+type LockState = "idle" | "acquiring" | "held" | "closed";
+
+export function createSessionLock(client: LockClient): WorkerLock & { readonly state: LockState } {
+  let state: LockState = "idle";
+  let ending: Promise<void> | undefined;
+  let releasing: Promise<void> | undefined;
+  const endOwnSession = () => {
+    ending ??= Promise.resolve().then(() => client.end()).finally(() => { state = "closed"; });
+    return ending;
+  };
+  // Only the owner changes its state. Session loss while held is always fatal.
+  client.on("error", () => { process.exitCode = 1; if (state === "held") process.exit(1); });
+  client.on("end", () => { if (state === "held") process.exit(1); });
   return {
+    get state() { return state; },
     async tryAcquire() {
+      // Keep this outside the owner's cleanup catch: rejected reuse must not end its session.
+      if (state !== "idle" || ending) throw new LockError("lock instance already in use");
+      state = "acquiring";
       try {
         await client.connect();
         const result = await client.query("SELECT pg_try_advisory_lock($1::bigint) AS acquired", [WORKER_LOCK_KEY]);
-        held = result.rows[0]?.acquired === true;
-        if (!held) { closed = true; await client.end(); }
-        return held;
+        if (result.rows[0]?.acquired === true) { state = "held"; return true; }
+        state = "idle";
+        await endOwnSession();
+        return false;
       } catch {
-        closed = true;
-        await client.end().catch(() => {});
+        await endOwnSession().catch(() => {});
         throw new WorkerError("Worker lock connection failed");
       }
     },
     async release() {
-      if (closed) return;
-      closed = true;
-      try {
-        if (held) await client.query("SELECT pg_advisory_unlock($1::bigint)", [WORKER_LOCK_KEY]);
-      } finally { held = false; await client.end(); }
+      if (state === "closed") return;
+      if (state === "acquiring") throw new LockError("lock instance already in use");
+      releasing ??= (async () => {
+        try {
+          if (state === "held") await client.query("SELECT pg_advisory_unlock($1::bigint)", [WORKER_LOCK_KEY]);
+        } finally { state = "idle"; await endOwnSession(); }
+      })();
+      await releasing;
     },
   };
 }
