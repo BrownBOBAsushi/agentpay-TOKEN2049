@@ -10,12 +10,12 @@
   `01a110bb…` settled, net 1.0 tUSDM), **hosted on Railway** (MPS + Worker + Postgres). All in EVIDENCE.md.
 - **M3 web, merged:** landing (T-011), `/receipt/[id]` (T-012), `/mandate` (T-013), security-paper
   texture (T-014). **Not deployed to Vercel yet.**
-- **In flight: T-015** (teller's desk world + landing scroll scene). Sent to astra; astra was compacting
-  context with no `feat/T-015-desk` branch yet. If the branch does not exist with commits, **re-send
-  T-015 to the new astra**. Then **T-016** (receipt + mandate on the desk). Cards are in `docs/tasks/`.
+- **T-015 built, not reviewed:** branch `feat/T-015-desk` (impl `4b81080`, build report `57654d3` in
+  `docs/tasks/T-015.build.md`). Next: orch visual check, then sol code review, then merge. Do **not**
+  re-send T-015. Then **T-016** (receipt + mandate on the desk). Cards are in `docs/tasks/`.
 
 ## Next steps (in order)
-1. T-015: astra builds → orch visual check (build, `next start`, gstack `/browse` screenshots desktop
+1. T-015 (already built): orch visual check (build, `next start`, gstack `/browse` screenshots desktop
    1440×900 + mobile 390×844, one batched design round max) → sol code review → merge.
 2. T-016: same loop.
 3. Local preview for the user (they review before any deploy): `rm -rf .next && npm run build &&
