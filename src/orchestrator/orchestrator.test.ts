@@ -201,14 +201,14 @@ it("reuses one signature through transport failures and resolves it on restart",
   const deps = { fetch: fetchPaid, createHeaders: sign, sleep: async (ms: number) => { clock += ms; }, lookupTransaction: async () => !pending };
   const id = { taskId, eventId, action: "pay" as const };
   try {
-    await expect(payApproved(proposal, "http://seller/api/market-data", deps, new Journal(path), id, expiry)).rejects.toThrow("not found on preprod");
+    await expect(payApproved(proposal, "http://seller/api/market-data", deps, new Journal(path), id, expiry)).rejects.toThrow("transaction expired unsettled; no payment");
     pending = false;
     await payApproved(proposal, "http://seller/api/market-data", deps, new Journal(path), id, expiry);
     expect(sent).toEqual(Array(3).fill(signed.headers["PAYMENT-SIGNATURE"]));
     expect(sign).toHaveBeenCalledTimes(1);
   } finally { now.mockRestore(); }
 });
-it.each(["settle", "required"])("retries settlement_pending (%s header) with one signature", async (header) => {
+it.each(["settle", "required"])("polls the chain after settlement_pending (%s header) with one signature", async (header) => {
   const dir = await directory();
   const signed = testPayment(); const sign = vi.fn(async () => signed.headers);
   const sent: string[] = [];
@@ -224,12 +224,13 @@ it.each(["settle", "required"])("retries settlement_pending (%s header) with one
       headers: { "PAYMENT-RESPONSE": Buffer.from(JSON.stringify(settled)).toString("base64") } });
   };
   const sleep = vi.fn(async () => {});
-  const payment = await payApproved(proposal, "http://seller/api/market-data", { fetch: fetchPaid, createHeaders: sign, sleep, lookupTransaction: async () => false },
+  const lookupTransaction = vi.fn(async () => lookupTransaction.mock.calls.length === 3);
+  const payment = await payApproved(proposal, "http://seller/api/market-data", { fetch: fetchPaid, createHeaders: sign, sleep, lookupTransaction },
     new Journal(join(dir, "journal.json")), { taskId, eventId, action: "pay" }, Math.floor(Date.now() / 1000) + 3600);
-  expect(payment.status).toBe("confirmed");
-  expect(sent).toEqual([signed.headers["PAYMENT-SIGNATURE"], signed.headers["PAYMENT-SIGNATURE"]]);
+  expect(payment.status).toBe("confirmed-on-chain");
+  expect(sent).toEqual([signed.headers["PAYMENT-SIGNATURE"]]);
   expect(sign).toHaveBeenCalledTimes(1);
-  expect(sleep).toHaveBeenCalledWith(3000);
+  expect(sleep.mock.calls).toEqual([[5000], [5000]]);
 });
 it("blocks simultaneous runs on one journal", async () => {
   const dir = await directory(); const journal = new Journal(join(dir, "journal.json"));
