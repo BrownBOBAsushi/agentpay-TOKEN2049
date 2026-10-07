@@ -145,3 +145,13 @@
 - **Why:** Fits the time left (deadline 7 Oct 22:00), spends no paid credit, and keeps the S2 injection demo
   (never cut).
 - **Status:** Accepted.
+
+## DEC-T15 — SPIKE S3 answered: Lace signData bundle verifies
+- **Date:** 2026-10-07
+- **Decision:** A real Lace (preprod, account Cardano #0, base address `addr_test1qprr4fdz…ets72`) `signData`
+  result, as packed by `/mandate`, passes `verifyMandate` unchanged (`{ok:true}`; digest recomputes; signer =
+  payer). Saved as `src/guard/fixtures/bundle.wallet.json`; the cip8 wallet test is no longer skipped. The
+  bundle is the hero Mandate for the recorded S1 run: 2 tADA (`lovelace` `2000000`) to `DEMO_SELLER_ADDRESS`,
+  expiry 2026-10-07 15:59 UTC, nonce `d14e4b3e…8c68c1`. Eternl not tested (PLAN S3 fallback: one wallet).
+- **Why:** Closes S3 and PLAN M1 with a real wallet, not a test key.
+- **Status:** Accepted.

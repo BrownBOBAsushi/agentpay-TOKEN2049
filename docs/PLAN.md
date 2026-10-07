@@ -10,7 +10,7 @@
 |---|---|---|---|
 | S1 | Does the hosted x402 facilitator accept a tx with metadata label 674? | Build a 1 tADA x402 payment with `attachMetadata({label:674n})`, send to facilitator. | Drop the metadata link; bind by putting the proposal tx id in the Receipt only. |
 | S2 ✅ DEC-T09 | Exact `masumiPayment` JSON and the signed-seller-terms call | `curl :3012/api-docs`, `sokosumi skills`, read `masumi-network/demo-agent-token2049`. | Ask a Masumi mentor on Telegram. |
-| S3 | CIP-30 `signData` return shape in Lace and Eternl | Tiny page: sign `JCS(mandate)`, verify with evolution-sdk. | Use one wallet only in the demo. |
+| S3 ✅ DEC-T15 (Lace) | CIP-30 `signData` return shape in Lace and Eternl | Tiny page: sign `JCS(mandate)`, verify with evolution-sdk. | Use one wallet only in the demo. |
 | S4 ✅ DEC-T09 (yes, seller sets it) | Can signed terms use a short `unlockTime` for the demo? | Read terms API from S2. | Show escrow lock + result hash; show collection later in the write-up. |
 
 ## Milestones
@@ -30,8 +30,9 @@
 
 ### M1 — guard-core (h3–h8)
 - [x] Mandate schema (zod), JCS, digest. Unit tests. (T-002, 41 tests green; review APPROVE 7f97272)
-- [ ] CIP-8 verify (S3 done). Test with a real wallet signature fixture.
-      T-003 merged: verify + 20 forgery cases green (review 824c842). Real-wallet fixture still open (needs S3).
+- [x] CIP-8 verify (S3 done). Test with a real wallet signature fixture.
+      T-003 merged: verify + 20 forgery cases green (review 824c842). Real Lace preprod bundle
+      `src/guard/fixtures/bundle.wallet.json` verifies; test un-skipped (DEC-T15).
 - [x] Matcher `x402` + Diff + reason codes. Tests for S1 happy path and S2 injection. (T-004, 116 tests green; review APPROVE b48ac7d)
 - [x] Guard Receipt sign/verify with Guard Key. (T-005, 140 tests green; review APPROVE 9b33951)
 
