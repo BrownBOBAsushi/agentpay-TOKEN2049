@@ -14,8 +14,9 @@
     "test": "vitest run",
     "worker": "node --env-file-if-exists=.env.local --import tsx src/worker/index.ts",
     "worker:reconcile": "node --env-file-if-exists=.env.local --import tsx src/worker/reconcile.ts",
-    "orchestrator": "tsx src/orchestrator/index.ts",
-    "demo-seller": "tsx src/demo-seller/index.ts"
+    "orchestrator": "node --env-file-if-exists=.env.local --import tsx src/orchestrator/index.ts",
+    "demo-seller": "node --env-file-if-exists=.env.local --import tsx src/demo-seller/index.ts",
+    "demo:mandate": "node --env-file-if-exists=.env.local --import tsx src/orchestrator/mandate.ts"
   },
   "dependencies": {
     "@evolution-sdk/evolution": "0.5.17",

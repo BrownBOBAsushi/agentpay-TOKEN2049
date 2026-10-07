@@ -10,3 +10,4 @@ mps-openapi.json
 .DS_Store
 .vercel
 next-env.d.ts
+runs/
