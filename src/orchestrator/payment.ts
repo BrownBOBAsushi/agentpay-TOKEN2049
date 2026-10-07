@@ -77,8 +77,13 @@ export type PaymentDeps = {
   log?: (line: string) => void;
 };
 export type PaymentOperation = (proposal: SpendProposal, endpoint: string, id: ActionId, mandateExpiry: number) => Promise<Payment>;
+export type PaymentJournal = Pick<Journal, "get" | "set"> & {
+  // Durable stores atomically reserve the Task before any signer is initialized.
+  // Only the successful inserter owns the new signing state.
+  claim?: (id: ActionId, digest: string) => Promise<boolean>;
+};
 
-// Server callers get the CLI's payment checks with a separate journal and injected I/O.
+// File-backed callers get the CLI's payment checks with a separate journal and injected I/O.
 // The whole read/sign/send/save sequence holds the journal lock, including retries.
 export function createPaymentRunner(options: { journalPath: string; deps?: PaymentDeps; env?: NodeJS.ProcessEnv }): PaymentOperation {
   const journal = new Journal(options.journalPath);
@@ -94,11 +99,16 @@ export function createPaymentRunner(options: { journalPath: string; deps?: Payme
 }
 
 export async function payApproved(proposal: SpendProposal, endpoint: string, deps: PaymentDeps,
-  journal: Pick<Journal, "get" | "set">, id: ActionId, mandateExpiry: number): Promise<Payment> {
-  let saved = await journal.get(id);
+  journal: PaymentJournal, id: ActionId, mandateExpiry: number, options: { retryPrepared?: boolean } = {}): Promise<Payment> {
+  const digest = proposalDigest(proposal);
+  const ownsClaim = journal.claim ? await journal.claim(id, digest) : false;
+  let saved: Awaited<ReturnType<PaymentJournal["get"]>> | undefined = await journal.get(id);
+  if (ownsClaim) {
+    if (saved?.state !== "signing" || saved.proposalDigest !== digest) throw new StopError("durable payment claim invalid; no signing");
+    saved = undefined;
+  }
   const resumed = saved?.state === "prepared";
   if (saved?.state === "signing") throw new StopError("payment signing was interrupted; do not build a second transaction");
-  const digest = proposalDigest(proposal);
   if (saved && (saved.endpoint !== endpoint || saved.proposalDigest !== digest)) throw new StopError("saved payment does not match the approved proposal and endpoint");
   if (saved?.state === "done") {
     if (!saved.payment) throw new StopError("saved payment result missing; no second payment");
@@ -152,7 +162,20 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
       await deps.sleep(Number(deadline - BigInt(now) < 5000n ? deadline - BigInt(now) : 5000n));
     }
   };
-  if (resumed) return confirmOnChain();
+  if (resumed) {
+    // The CLI retains confirmation-only resume. A durable server can also recover
+    // a crash after saving prepared bytes but before the first broadcast.
+    if (!options.retryPrepared) return confirmOnChain();
+    let found = false;
+    try { found = await deps.lookupTransaction(txHash); } catch { /* Inconclusive; reuse only these bytes. */ }
+    if (found) {
+      const payment: Payment = { txHash, network: "cardano:preprod", status: "confirmed-on-chain" };
+      await journal.set(id, { ...saved, state: "done", payment });
+      return payment;
+    }
+    // After the signed TTL, only confirmation is useful. Never build a replacement.
+    if (BigInt(Date.now()) >= deadline - 60_000n) return confirmOnChain();
+  }
   const timeoutAt = Date.now() + 300_000;
   while (Date.now() < timeoutAt) {
     let response: Response;
