@@ -155,3 +155,17 @@
   expiry 2026-10-07 15:59 UTC, nonce `d14e4b3e…8c68c1`. Eternl not tested (PLAN S3 fallback: one wallet).
 - **Why:** Closes S3 and PLAN M1 with a real wallet, not a test key.
 - **Status:** Accepted.
+
+## DEC-T16 — Live `/store` page: scripted injected agent, real Guard check
+- **Date:** 2026-10-07
+- **Decision:** A public page `/store` tells the consumer story "ask your AI to buy a latte". It shows the
+  user's Figma "The Corner Store" (latte 6.50; hidden injection: total 28.00, merchant "Evil Store").
+  A **scripted** agent (labeled as a simulation of a prompt-injected agent) reads the page and builds an
+  x402 Spend Proposal. A Vercel server route runs the **real** `guardCheck` on that proposal against a
+  **real wallet-signed Mandate** (latte, 6.5 tADA to the store, expiry 2026-12-31) and returns the Verdict +
+  Diff. No payment, no Guard Key and no Sokosumi Task on Vercel; the page links the recorded paid run.
+  The live check passes `nonceUsed: false` and never consumes the Mandate. tADA stands in for SGD.
+- **Why:** Real models often refuse to "bite" on camera (StraitX experience). The product claim is that the
+  Guard does not depend on the model's behaviour, so a scripted compromised agent is honest when labeled,
+  and the check itself is the real code on a real signature. Judges can try it after the deadline.
+- **Status:** Accepted.
