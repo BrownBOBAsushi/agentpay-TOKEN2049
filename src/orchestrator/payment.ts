@@ -77,7 +77,9 @@ export type PaymentDeps = {
   log?: (line: string) => void;
 };
 export type PaymentOperation = (proposal: SpendProposal, endpoint: string, id: ActionId, mandateExpiry: number) => Promise<Payment>;
-export type PaymentJournal = Pick<Journal, "get" | "set"> & {
+export type PaymentJournal = {
+  get: (id: ActionId) => Promise<Awaited<ReturnType<Journal["get"]>> | undefined>;
+  set: Journal["set"];
   // Durable stores atomically reserve the Task before any signer is initialized.
   // Only the successful inserter owns the new signing state.
   claim?: (id: ActionId, digest: string) => Promise<boolean>;
@@ -101,11 +103,26 @@ export function createPaymentRunner(options: { journalPath: string; deps?: Payme
 export async function payApproved(proposal: SpendProposal, endpoint: string, deps: PaymentDeps,
   journal: PaymentJournal, id: ActionId, mandateExpiry: number, options: { retryPrepared?: boolean } = {}): Promise<Payment> {
   const digest = proposalDigest(proposal);
-  const ownsClaim = journal.claim ? await journal.claim(id, digest) : false;
   let saved: Awaited<ReturnType<PaymentJournal["get"]>> | undefined = await journal.get(id);
-  if (ownsClaim) {
-    if (saved?.state !== "signing" || saved.proposalDigest !== digest) throw new StopError("durable payment claim invalid; no signing");
-    saved = undefined;
+  let fresh: Awaited<ReturnType<typeof readProposal>> | undefined;
+  if (!saved) {
+    if (Math.floor(Date.now() / 1000) + proposal.requirements.maxTimeoutSeconds > mandateExpiry) {
+      throw new StopError("Mandate expires before payment deadline; no payment");
+    }
+    fresh = await readProposal(await deps.fetch(endpoint, { redirect: "error", signal: AbortSignal.timeout(30_000) }));
+    if (proposalDigest(fresh.proposal) !== digest) throw new StopError("requirements changed; no payment signed");
+    if (journal.claim) {
+      // A slow GET must not turn a read-only expiry failure into a signing claim.
+      if (Math.floor(Date.now() / 1000) + proposal.requirements.maxTimeoutSeconds > mandateExpiry) {
+        throw new StopError("Mandate expires before payment deadline; no payment");
+      }
+      if (!await journal.claim(id, digest)) {
+        // Another instance may have paid while this instance checked the seller.
+        // Recover its state; never sign or reclaim an ambiguous signing owner.
+        saved = await journal.get(id);
+        if (!saved) throw new StopError("durable payment claim unavailable; no signing");
+      }
+    }
   }
   const resumed = saved?.state === "prepared";
   if (saved?.state === "signing") throw new StopError("payment signing was interrupted; do not build a second transaction");
@@ -115,11 +132,7 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
     return saved.payment;
   }
   if (!saved) {
-    if (Math.floor(Date.now() / 1000) + proposal.requirements.maxTimeoutSeconds > mandateExpiry) {
-      throw new StopError("Mandate expires before payment deadline; no payment");
-    }
-    const fresh = await readProposal(await deps.fetch(endpoint, { redirect: "error", signal: AbortSignal.timeout(30_000) }));
-    if (proposalDigest(fresh.proposal) !== proposalDigest(proposal)) throw new StopError("requirements changed; no payment signed");
+    if (!fresh) throw new StopError("fresh payment requirements missing; no signing");
     await journal.set(id, { state: "signing", endpoint, proposalDigest: digest });
     const headers = await deps.createHeaders({ ...fresh.required, accepts: [fresh.required.accepts[0]] }, mandateExpiry);
     const txHash = inspectHeaders(headers, proposal, mandateExpiry);

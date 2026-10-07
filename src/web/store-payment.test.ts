@@ -90,7 +90,7 @@ async function payer(settings: { ttl?: bigint; changed?: boolean; chain?: boolea
   const deps: PaymentDeps = { fetch: paymentFetch, createHeaders: sign, sleep: async () => {}, lookupTransaction: async () => true, log: () => {} };
   const runner = (runnerDb: Db = { query: (text, params) => db.query(text, params) }, overrides: Partial<PaymentDeps> = {}) =>
     createStorePaymentRunner({ db: runnerDb, deps: { ...deps, ...overrides } });
-  return { pay: runner(), runner, sign, sent, txHash, headers };
+  return { pay: runner(), runner, sign, sent, txHash, headers, paymentFetch };
 }
 
 it("unpaid latte GET returns the exact x402 requirements without network", async () => {
@@ -340,6 +340,88 @@ it("a durable prepared hash that differs from the original signed bytes refuses 
     [taskId, proposalDigest(proposal), paid.headers, "ab".repeat(32)]);
   await expect(paid.runner()(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, bundle().mandate.expiry)).rejects.toThrow("hash mismatch");
   expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+});
+it.each(["transport", "http-503", "changed-402", "expiry"])("read-only %s failure leaves no durable claim and no signature", async (failure) => {
+  const paid = await payer(); const id = { taskId, eventId: "event", action: "pay" as const };
+  const expiry = failure === "expiry" ? Math.floor(Date.now() / 1000) + 599 : bundle().mandate.expiry;
+  const fetcher = vi.fn<PaymentDeps["fetch"]>(async () => {
+    expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]);
+    if (failure === "transport") throw new Error("transient seller GET failure");
+    if (failure === "http-503") return new Response("unavailable", { status: 503 });
+    return new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": Buffer.from(JSON.stringify({ x402Version: 2,
+      accepts: [{ ...proposal.requirements, amount: "28000000" }] })).toString("base64") } });
+  });
+  await expect(paid.runner(undefined, { fetch: fetcher })(proposal, endpoint, id, expiry)).rejects.toThrow();
+  expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]);
+  expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+  if (failure === "expiry") expect(fetcher).not.toHaveBeenCalled();
+  expect(await paid.runner()(proposal, endpoint, id, bundle().mandate.expiry)).toMatchObject({ txHash: paid.txHash });
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
+});
+it("two instances retrying a transient fresh GET failure both check before the claim, then obtain only one signature", async () => {
+  const paid = await payer(); const id = { taskId, eventId: "event", action: "pay" as const }; const expiry = bundle().mandate.expiry;
+  await expect(paid.runner(undefined, { fetch: async () => { throw new Error("transient GET failure"); } })(proposal, endpoint, id, expiry)).rejects.toThrow();
+  expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]); expect(paid.sign).not.toHaveBeenCalled();
+  let releaseFresh!: () => void; let bothFresh!: () => void; let freshCalls = 0;
+  const freshGate = new Promise<void>((resolve) => { releaseFresh = resolve; });
+  const freshStarted = new Promise<void>((resolve) => { bothFresh = resolve; });
+  let releaseSign!: () => void; let enteredSign!: () => void;
+  const signGate = new Promise<void>((resolve) => { releaseSign = resolve; });
+  const signStarted = new Promise<void>((resolve) => { enteredSign = resolve; });
+  const overrides: Partial<PaymentDeps> = {
+    fetch: async (url, init) => {
+      if (!init?.headers) {
+        expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]);
+        if (++freshCalls === 2) bothFresh();
+        await freshGate;
+      }
+      return paid.paymentFetch(url, init);
+    },
+    createHeaders: async () => { enteredSign(); await signGate; return paid.sign(); },
+  };
+  const attempts = [paid.runner(undefined, overrides), paid.runner(undefined, overrides)].map((run) =>
+    run(proposal, endpoint, id, expiry).then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error })));
+  try {
+    await freshStarted; releaseFresh(); await signStarted;
+    const loser = await Promise.race(attempts);
+    expect(loser.ok).toBe(false);
+    if (!loser.ok) expect(loser.error).toHaveProperty("message", "Payment signing is interrupted or in progress. No second transaction will be signed; inspect the durable store payment.");
+  } finally { releaseFresh(); releaseSign(); }
+  const results = await Promise.all(attempts);
+  expect(results.filter((result) => result.ok)).toHaveLength(1); expect(freshCalls).toBe(2);
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toEqual([paid.headers["PAYMENT-SIGNATURE"]]);
+  expect(await paid.runner()(proposal, endpoint, id, expiry)).toMatchObject({ txHash: paid.txHash });
+  expect(paid.sign).toHaveBeenCalledTimes(1);
+});
+it.each(["done", "prepared"])("a losing claim recovers a competing instance's %s state without signing", async (state) => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry; const id = { taskId, eventId: "original-event", action: "pay" as const };
+  const competingDb: Db = { query: (text, params) => {
+    if (state === "prepared" && text.includes("UPDATE") && text.includes("state='done'")) throw new Error("lost done update");
+    return db.query(text, params);
+  } };
+  const runner = paid.runner(undefined, { fetch: async (url, init) => {
+    if (!init?.headers) {
+      // This runner has already read no row. The competitor now signs once.
+      const competing = paid.runner(competingDb)(proposal, endpoint, id, expiry);
+      if (state === "prepared") await expect(competing).rejects.toThrow("database operation failed");
+      else expect(await competing).toMatchObject({ txHash: paid.txHash });
+    }
+    return paid.paymentFetch(url, init);
+  } });
+  expect(await runner(proposal, endpoint, { ...id, eventId: "late-event" }, expiry)).toEqual({ txHash: paid.txHash,
+    network: "cardano:preprod", status: state === "done" ? "confirmed" : "confirmed-on-chain" });
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
+  expect((await db.query("SELECT event_id,state FROM store_payments")).rows).toEqual([{ event_id: "original-event", state: "done" }]);
+});
+it("a slow fresh GET that consumes the remaining expiry allowance leaves no signing claim", async () => {
+  const clock = Date.now(); vi.spyOn(Date, "now").mockReturnValue(clock);
+  const paid = await payer(); const expiry = Math.floor(clock / 1000) + 610;
+  const runner = paid.runner(undefined, { fetch: async (url, init) => {
+    vi.mocked(Date.now).mockReturnValue(clock + 20_000);
+    return paid.paymentFetch(url, init);
+  } });
+  await expect(runner(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, expiry)).rejects.toThrow("Mandate expires");
+  expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]); expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
 });
 it("validates a live Mandate cryptographically and rejects wrong signed payee/amount, asset, expiry and signature", () => {
   const b = bundle(); expect(validateStoreMandate(b)).toEqual(b);

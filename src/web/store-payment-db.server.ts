@@ -5,6 +5,7 @@ import type { Db } from "../worker/db";
 import { StopError } from "../orchestrator/journal";
 import { blockfrostLookup, payApproved, walletHeaders, type PaymentDeps, type PaymentJournal, type PaymentOperation } from "../orchestrator/payment";
 import { PaymentSchema } from "../orchestrator/transcript";
+import { proposalDigest } from "../guard";
 
 export const STORE_SIGNING_ERROR = "Payment signing is interrupted or in progress. No second transaction will be signed; inspect the durable store payment.";
 export class StoreSigningInterruptedError extends StopError {
@@ -16,9 +17,8 @@ const rowSchema = z.object({ task_id: z.string(), event_id: z.string().min(1), s
 
 // Each invocation has its own adapter. Ownership exists only after INSERT RETURNING;
 // no process lock, file journal, or stale local cache can confer signing permission.
-function paymentJournal(db: Db, endpoint: string): PaymentJournal {
+function paymentJournal(db: Db, endpoint: string, digest: string): PaymentJournal {
   let ownsClaim = false;
-  let digest: string;
   let eventId: string;
   const query: Db["query"] = async (text, params) => {
     try { return await db.query(text, params); }
@@ -27,14 +27,17 @@ function paymentJournal(db: Db, endpoint: string): PaymentJournal {
   return {
     async claim(id, approvedDigest) {
       if (id.action !== "pay") throw new StopError("expected a payment action");
-      digest = approvedDigest;
+      if (approvedDigest !== digest) throw new StopError("durable payment proposal mismatch; no signing");
       const result = await query(`INSERT INTO store_payments(task_id,event_id,state,proposal_digest)
         VALUES($1,$2,'signing',$3) ON CONFLICT(task_id) DO NOTHING RETURNING task_id`, [id.taskId, id.eventId, digest]);
       ownsClaim = result.rows.length === 1;
+      if (ownsClaim) eventId = id.eventId;
       return ownsClaim;
     },
     async get(id) {
+      if (id.action !== "pay") throw new StopError("expected a payment action");
       const result = await query("SELECT task_id,event_id,state,proposal_digest,headers,tx_hash,payment FROM store_payments WHERE task_id=$1", [id.taskId]);
+      if (result.rows.length === 0) return undefined;
       const parsed = rowSchema.safeParse(result.rows[0]);
       if (result.rows.length !== 1 || !parsed.success || parsed.data.task_id !== id.taskId) throw new StopError("Durable store payment row invalid; no signing");
       const row = parsed.data;
@@ -74,7 +77,7 @@ export function createStorePaymentRunner(options: { db: Db; deps?: PaymentDeps; 
   const deps = options.deps ?? { fetch, createHeaders: walletHeaders(env),
     sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     lookupTransaction: blockfrostLookup(env, fetch), log: () => {} };
-  return (proposal, endpoint, id, mandateExpiry) => payApproved(proposal, endpoint, deps, paymentJournal(options.db, endpoint), id, mandateExpiry, { retryPrepared: true });
+  return (proposal, endpoint, id, mandateExpiry) => payApproved(proposal, endpoint, deps, paymentJournal(options.db, endpoint, proposalDigest(proposal)), id, mandateExpiry, { retryPrepared: true });
 }
 
 let pool: Pool | undefined;
