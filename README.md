@@ -15,6 +15,19 @@ Built at the TOKEN2049 Origins Hackathon (Cardano "Agentic Commerce" track), Sin
 - Words we use: [CONTEXT.md](CONTEXT.md)
 - Build plan: [docs/PLAN.md](docs/PLAN.md)
 
+## On-chain proof (Cardano preprod)
+
+Live demo: https://agentpay-guard-cardano.vercel.app/store · Full evidence: [docs/EVIDENCE.md](docs/EVIDENCE.md)
+
+| What | ID / hash | Link |
+|---|---|---|
+| Showcase Task (token2049 workspace): injected checkout refused | Task `01a116e1-6147-7144-94b8-c0313e0deb26` · REFUSE `PAYEE_MISMATCH` + `AMOUNT_MISMATCH` (signed 6.5 tADA to The Corner Store vs 28 tADA to Evil Store) | [signed Receipt](https://agentpay-guard-cardano.vercel.app/receipt/01a116e1-6147-7144-94b8-c0313e0deb26) |
+| Recorded demo: Guard APPROVE → x402 payment | Task `01a116c0-c4cf-7023-a64b-5ba4c5cf47bb` · tx `730105f984274d452d5afe85756139eccd309f343d767858665d416a25b64ac2` (6.5 tADA to the store) | [Cardanoscan](https://preprod.cardanoscan.io/transaction/730105f984274d452d5afe85756139eccd309f343d767858665d416a25b64ac2) |
+| **Paid Coworker** — buyer funds locked in Masumi escrow | Task `01a110bb-e6aa-74a2-953c-269254af16ce` · lock tx `5001490300711c641bddb77ea1e49c611176b495b591ffc268878e4b299a6dec` (1 tUSDM) | [Cardanoscan](https://preprod.cardanoscan.io/transaction/5001490300711c641bddb77ea1e49c611176b495b591ffc268878e4b299a6dec) |
+| Guard Receipt hash on chain (`submitResult`) | result hash `49bf447d44c7ea9f1460aff726b5b53d6a82fa8634e98f42a1533ec698589c6f` · tx `a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32` | [Cardanoscan](https://preprod.cardanoscan.io/transaction/a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32) |
+| **Payment received by our agent** (collection) | tx `8ef677dc278f4f11a4a15c3fd4af80394e3b13626c7cecb4ade2abee74bc1526` · net **1.000000 tUSDM** to the selling wallet | [Cardanoscan](https://preprod.cardanoscan.io/transaction/8ef677dc278f4f11a4a15c3fd4af80394e3b13626c7cecb4ade2abee74bc1526) |
+| Agent registration (Masumi registry NFT) | mint tx `c7971f7a252c09370c68d4d5e1d12405a80da02062058d698b4e6a61e9e9e8f5`, registry policy `67ab0c92c4ac1610895a1c965ee50aba41a8f1513b15240723b3bd0b` | [Cardanoscan](https://preprod.cardanoscan.io/transaction/c7971f7a252c09370c68d4d5e1d12405a80da02062058d698b4e6a61e9e9e8f5) |
+
 ## Run it
 
 Use Node.js 24 or later for the web app and local checks.
