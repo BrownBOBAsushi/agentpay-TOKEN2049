@@ -1,0 +1,128 @@
+{
+  "events": [
+    {
+      "id": "01a10ff8-7fe8-70bc-9437-7f2acaee3d19",
+      "taskId": "01a10ff8-7fe1-7189-bb49-36777acc73cf",
+      "createdAt": "2026-10-06T06:48:26.320Z",
+      "updatedAt": "2026-10-06T06:48:26.337Z",
+      "actor": {
+        "type": "user",
+        "id": "01a10f4e-33fd-7317-bf31-8f4106b646d6",
+        "user": {
+          "id": "01a10f4e-33fd-7317-bf31-8f4106b646d6",
+          "name": "redacted",
+          "image": "redacted"
+        }
+      },
+      "userId": "01a10f4e-33fd-7317-bf31-8f4106b646d6",
+      "user": {
+        "id": "01a10f4e-33fd-7317-bf31-8f4106b646d6",
+        "name": "redacted",
+        "image": "redacted"
+      },
+      "coworkerId": null,
+      "sokoBotId": null,
+      "transactionId": null,
+      "credits": null,
+      "comment": null,
+      "authenticationUrl": null,
+      "channel": "SOKOSUMI",
+      "origin": "SOKOSUMI",
+      "status": "CREATED"
+    },
+    {
+      "id": "01a10ff8-7fe8-70bc-9437-82f208f0d881",
+      "taskId": "01a10ff8-7fe1-7189-bb49-36777acc73cf",
+      "createdAt": "2026-10-06T06:48:26.321Z",
+      "updatedAt": "2026-10-06T06:48:26.337Z",
+      "actor": {
+        "type": "user",
+        "id": "01a10f4e-33fd-7317-bf31-8f4106b646d6",
+        "user": {
+          "id": "01a10f4e-33fd-7317-bf31-8f4106b646d6",
+          "name": "redacted",
+          "image": "redacted"
+        }
+      },
+      "userId": "01a10f4e-33fd-7317-bf31-8f4106b646d6",
+      "user": {
+        "id": "01a10f4e-33fd-7317-bf31-8f4106b646d6",
+        "name": "redacted",
+        "image": "redacted"
+      },
+      "coworkerId": null,
+      "sokoBotId": null,
+      "transactionId": null,
+      "credits": null,
+      "comment": null,
+      "authenticationUrl": null,
+      "channel": "SOKOSUMI",
+      "origin": "SOKOSUMI",
+      "status": "READY"
+    },
+    {
+      "id": "01a10ff8-84ac-72ee-846c-af4711206a02",
+      "taskId": "01a10ff8-7fe1-7189-bb49-36777acc73cf",
+      "createdAt": "2026-10-06T06:48:27.564Z",
+      "updatedAt": "2026-10-06T06:48:27.564Z",
+      "actor": {
+        "type": "coworker",
+        "id": "01a10f51-9560-7687-8f44-08fab5311181",
+        "coworker": {
+          "id": "01a10f51-9560-7687-8f44-08fab5311181",
+          "name": "redacted",
+          "image": "redacted",
+          "slug": "agentpay-guard"
+        }
+      },
+      "userId": null,
+      "coworkerId": "01a10f51-9560-7687-8f44-08fab5311181",
+      "coworker": {
+        "id": "01a10f51-9560-7687-8f44-08fab5311181",
+        "name": "redacted",
+        "image": "redacted",
+        "slug": "agentpay-guard"
+      },
+      "sokoBotId": null,
+      "transactionId": null,
+      "credits": null,
+      "comment": null,
+      "authenticationUrl": null,
+      "channel": "SOKOSUMI",
+      "origin": "SOKOSUMI",
+      "status": "RUNNING"
+    },
+    {
+      "id": "01a10ff8-8764-74b9-aec4-9be7059763a9",
+      "taskId": "01a10ff8-7fe1-7189-bb49-36777acc73cf",
+      "createdAt": "2026-10-06T06:48:28.260Z",
+      "updatedAt": "2026-10-06T06:48:28.260Z",
+      "actor": {
+        "type": "coworker",
+        "id": "01a10f51-9560-7687-8f44-08fab5311181",
+        "coworker": {
+          "id": "01a10f51-9560-7687-8f44-08fab5311181",
+          "name": "redacted",
+          "image": "redacted",
+          "slug": "agentpay-guard"
+        }
+      },
+      "userId": null,
+      "coworkerId": "01a10f51-9560-7687-8f44-08fab5311181",
+      "coworker": {
+        "id": "01a10f51-9560-7687-8f44-08fab5311181",
+        "name": "redacted",
+        "image": "redacted",
+        "slug": "agentpay-guard"
+      },
+      "sokoBotId": null,
+      "transactionId": null,
+      "credits": null,
+      "comment": "{\"receipt\":{\"v\":1,\"verdict\":\"APPROVE\",\"reasons\":[],\"diff\":[],\"mandateDigest\":\"e4849aec09fa939220e8268d5eb87cc24a5a4d783b4471208a90d7ac7e03fe30\",\"proposalDigest\":\"5b575da7296f948d582dec9f3dd37ae13f79457f5fa2a067a773e423d1022741\",\"taskId\":\"01a10ff8-7fe1-7189-bb49-36777acc73cf\",\"ts\":1791269306},\"coseSign1\":\"84582aa201276761646472657373581d601eca43d5b55e104c2002416dd89dc88eebd523e834cc9b45c7c9ab0ca166686173686564f45901197b2264696666223a5b5d2c226d616e64617465446967657374223a2265343834396165633039666139333932323065383236386435656238376363323461356134643738336234343731323038613930643761633765303366653330222c2270726f706f73616c446967657374223a2235623537356461373239366639343864353832646563396633646433376165313366373934353766356661326130363761373733653432336431303232373431222c22726561736f6e73223a5b5d2c227461736b4964223a2230316131306666382d376665312d373138392d626234392d333637373761636337336366222c227473223a313739313236393330362c2276223a312c2276657264696374223a22415050524f5645227d58401b49247f783f62d1b71678005e92161b7ee769a8a0f01caf0ab82b9a8cbd71921a00854501115c874d12d9182be85dc78ecd3211715734ea985aef9c99cf110f\",\"coseKey\":\"a4010103272006215820fd344a1547e503bf1593a205f0a7771a69bbc0176cfceff1bb268c555a2ccc8a\",\"guardAddress\":\"addr_test1vq0v5s74k40pqnpqqfqkmkyaez8wh4fraq6vex69cly6krqvq9qx4\",\"digest\":\"90699db541f01f7652729d7aa347dcae2704071013907f31b47ce639b9b4454a\"}",
+      "authenticationUrl": null,
+      "channel": "SOKOSUMI",
+      "origin": "SOKOSUMI",
+      "status": "COMPLETED"
+    }
+  ]
+}

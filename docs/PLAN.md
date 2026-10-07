@@ -50,11 +50,11 @@
   (orch browser checks 1440×900 + 390×844), sol APPROVE in `*.review.md`; main 362 tests pass.
 - [ ] Deploy to Vercel (user says "deploy") · design finish review + `DESIGN.md`.
 
-### M4 — Demo Orchestrator + x402 (h19–h25)
+### M4 — Demo Orchestrator + x402 (h19–h25) — cards T-017 (seller + Orchestrator), T-018 (`/demo`), DEC-T14
 - [ ] demo-seller: x402-paid route on preprod (template `x402-express`).
 - [ ] Orchestrator: reads page → proposal → hires Guard → pays on APPROVE only.
 - [ ] Injected page variant changes payee + amount → REFUSE with Diff.
-- [ ] Matcher `cardano-tx` + metadata 674 link (if S1 = yes).
+- [ ] ~~Matcher `cardano-tx` + metadata 674 link~~ — cut (DEC-T14, cut list 5).
 - [ ] `/demo` arena: S1 / S2 buttons, live log.
 
 ### M5 — Event run and evidence (h25–h29)

@@ -123,3 +123,25 @@
   20 preprod blocks took ~9.5 min that day. The demo's +5 min payBy needs a faster MPS. Lowering
   the MPS threshold is the human's choice (it weakens rollback safety); wider offsets work either way.
 - **Status:** Accepted.
+
+## DEC-T14 — M4 demo shape (Orchestrator, demo-seller, /demo)
+- **Date:** 2026-10-07
+- **Decision:**
+  - **demo-seller** is a local Express app (`@x402/express`, all `@x402/*` pinned to 2.26.0) against the
+    hosted preprod facilitator. It sells "market data" for 2 tADA (`lovelace`, `2000000`) to
+    `DEMO_SELLER_ADDRESS`. It also serves two offer pages (honest and injected) and an "attacker" route that
+    stands in for an attacker server (50 tADA to a fixed attacker address).
+  - **Orchestrator** is a deterministic "naive agent", not an LLM. It obeys the last payment instruction in
+    the page text, which models a prompt-injected LLM. Reason: no paid model credit (user rule), and the
+    demo is repeatable. `MODEL_API_KEY` stays unused.
+  - The Orchestrator **hires the Guard with a free Sokosumi Task** (`sokosumi --preprod tasks create
+    --personal`, user OAuth on the Mac). The hosted Worker (free mode) runs it. The Orchestrator reads the
+    Receipt from the COMPLETED event `comment` and verifies it locally before it trusts the Verdict.
+  - It pays only on a verified `APPROVE`, and only for x402 requirements whose proposal digest equals the
+    approved one. Pay is idempotent per `{taskId, eventId, "pay"}`.
+  - **`/demo`** replays recorded run transcripts (`public/demo-runs/*.json`) from real preprod runs, with
+    links to `/receipt/<taskId>` and Cardanoscan. Vercel cannot run the `sokosumi` CLI, so no live mode.
+  - **Cut:** `cardano-tx` matcher + metadata 674 link (PLAN cut list item 5).
+- **Why:** Fits the time left (deadline 7 Oct 22:00), spends no paid credit, and keeps the S2 injection demo
+  (never cut).
+- **Status:** Accepted.
