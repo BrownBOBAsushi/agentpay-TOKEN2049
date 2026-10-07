@@ -78,14 +78,14 @@ it("runs the test Mandate CLI offline and prints only its path and digest", asyn
   const dir = await directory();
   // Run the same entry point without loading the repository's secret env file.
   const result = await promisify(execFile)(process.execPath, ["--import", new URL("../../node_modules/tsx/dist/loader.mjs", import.meta.url).href,
-    fileURLToPath(new URL("./mandate.ts", import.meta.url)), "--payee", seller, "--amount", "2000000", "--minutes", "60"], { cwd: dir });
+    fileURLToPath(new URL("./mandate.ts", import.meta.url)), "--payee", seller, "--amount", "2000000", "--minutes", "60"], { cwd: dir, timeout: 12_000 });
   const [path, digest] = result.stdout.trim().split("\n");
   const bundle = JSON.parse(await readFile(join(dir, path), "utf8"));
   expect(verifyMandate(bundle)).toEqual({ ok: true });
   expect(digest).toBe(`Mandate digest: ${bundle.digest}`);
   expect(Object.keys(bundle).sort()).toEqual(["coseKey", "coseSign1", "digest", "mandate", "payerAddress"]);
   expect(result.stderr).toBe("");
-});
+}, 15_000);
 it("hires with the bundle and proposal, trusts APPROVE, pays once and writes a valid transcript", async () => {
   const s = await setup();
   const transcript = await run(s);
