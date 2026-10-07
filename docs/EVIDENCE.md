@@ -61,3 +61,15 @@ Orchestrator wallet `addr_test1qrakfmhm…lsvx3jy5` (faucet tx `995948f9fdbffb81
 | S2 injection (rehearsal 2) | Task `01a11491-13d8-7515-bfae-584acd44730d` · REFUSE payee + amount · no payment · 11.7 s | Orchestrator log |
 | S1 honest (rehearsal 2) | Task `01a11491-3fab-76a9-b0b8-df7cce02ef17` · APPROVE · tx `37e05757f34867f5b55e5c2dd03fbfce1118247a3ebe3d8e005bf275c9bd550a` (block 5263054, 04:15:04 UTC) · first run stopped at ~62 s before settle (T-019), resume recorded `confirmed-on-chain` | https://preprod.cardanoscan.io/transaction/37e05757f34867f5b55e5c2dd03fbfce1118247a3ebe3d8e005bf275c9bd550a |
 | Real wallet Mandate (S3) | Lace preprod, payer `addr_test1qprr4fdz…ets72`, nonce `d14e4b3e…8c68c1`, `verifyMandate` ok (DEC-T15) — reserved for the recorded S1 run | `src/guard/cip8.test.ts` |
+
+## `/store` live (production, 2026-10-07, DEC-T16..T18)
+
+Site: https://agentpay-guard-cardano.vercel.app/store. Store = The Corner Store (`addr_test1qzh3ask7…ct29t8`),
+latte 6.5 tADA. Real wallet Mandate: Lace preprod `addr_test1qprr4fdz…ets72`, nonce `88619f44…` (fixture).
+
+| Item | Value | Verified by |
+|---|---|---|
+| Sokosumi hire by API (probe) | Task `01a115be-d9e3-73f9-863d-9ecc0b2175be` · REFUSE `PAYEE_MISMATCH`+`AMOUNT_MISMATCH` in ~6 s (Coworker key + `X-Context-User-Id`, user grant approved) | Core task events |
+| One-line attack flow (production) | Task `01a115df-16d5-76d8-93bc-081baf73f66a` · injected 28 tADA → Evil Store · hired REFUSE, signed Receipt verified in ~12 s | browser run, `/receipt/<id>` |
+| Live paid flow #1 (test-key Mandate) | Task `01a1160c-282b-756a-8198-9b941ab8737c` · real 402 → hired APPROVE → x402 pay · tx `a2c562e96f7d262b58b137ceb31b08c5a3edb496f75c65bf99549a5ecdc2a016` (6.5 tADA to store). Pay route returned 409 after settlement (bookkeeping); second call recovered `confirmed-on-chain`, no second signature (T-023) | Blockfrost, `store_payments` row |
+| Live paid flow #2 (test-key Mandate, T-023 deployed) | Task `01a11626-91d7-760d-bef3-acb6cdb85e12` · **Paid in one run, 34 s** · tx `8c47d88938ef3d71961b9ff70bc74477e21784f8a9cfb8fcd2c9a342e81d3ed3` (6 500 000 lovelace to store) · row `done`, `confirmed-on-chain` | https://preprod.cardanoscan.io/transaction/8c47d88938ef3d71961b9ff70bc74477e21784f8a9cfb8fcd2c9a342e81d3ed3 |

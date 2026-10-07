@@ -145,3 +145,14 @@ record Task ID + Railway log line in EVIDENCE.md; update "Where things run" and 
 2. Fund the purchasing wallet `addr_test1qq33kw…ghzlc7` at dispenser.masumi.network (for the Orchestrator / buyer rehearsal).
 3. Watch for the event-workspace approval email; then run the event steps in `MASUMI-DIGEST.md` §1 step 12.
 4. ~~Railway account (M2).~~ Done. Optional: turn off the Postgres public TCP proxy.
+
+## `/store` live mode (7 Oct, DEC-T17/T18) — names only
+- Vercel production env added: `SOKOSUMI_COWORKER_ID`, `SOKOSUMI_TASK_USER_ID` (user id for `X-Context-User-Id`),
+  `STORE_TASK_TOKEN_SECRET` (status-token HMAC), `STORE_LIVE_KEY` (private live link; the user holds the link),
+  `ORCHESTRATOR_WALLET_MNEMONIC`, `BLOCKFROST_API_KEY_PREPROD`, `X402_FACILITATOR_URL`, `STORE_PAY_DATABASE_URL`.
+  Local copies in repo `.env.local` (0600). All set via stdin, never printed.
+- Durable payment claim: Railway Postgres, database `agentpay_guard`, table `store_payments`, role `store_pay`
+  (SELECT/INSERT/UPDATE on that table only; no DELETE, no access to Worker tables). Created by orch via the admin
+  public URL read by reference. Public TCP proxy must stay ON while `/store` live pay is used (Vercel connects through it).
+- Sokosumi: the user approved the Coworker grant so the Coworker key can create Tasks on the user's behalf.
+- Payer: the Orchestrator wallet (`addr_test1qrakfmhm…lsvx3jy5`, preprod test ADA only).
