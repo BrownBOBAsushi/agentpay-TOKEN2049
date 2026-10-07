@@ -6,10 +6,18 @@ import { StopError } from "../orchestrator/journal";
 import { blockfrostLookup, payApproved, walletHeaders, type PaymentDeps, type PaymentJournal, type PaymentOperation } from "../orchestrator/payment";
 import { PaymentSchema } from "../orchestrator/transcript";
 import { proposalDigest } from "../guard";
+import { logStorePaymentFailure, paymentPgCode } from "./store-payment-errors.server";
 
 export const STORE_SIGNING_ERROR = "Payment signing is interrupted or in progress. No second transaction will be signed; inspect the durable store payment.";
 export class StoreSigningInterruptedError extends StopError {
   constructor() { super(STORE_SIGNING_ERROR); }
+}
+export class StorePaymentDatabaseError extends StopError {
+  readonly pgCode: string | undefined;
+  constructor(error: unknown, readonly operation: "read" | "claim" | "prepare" | "done") {
+    super("Durable store payment database operation failed; inspect saved state before retrying.");
+    this.pgCode = paymentPgCode(error); // Never retain the raw error or its cause.
+  }
 }
 const rowSchema = z.object({ task_id: z.string(), event_id: z.string().min(1), state: z.enum(["signing", "prepared", "done"]),
   proposal_digest: z.string().regex(/^[0-9a-f]{64}$/), headers: z.record(z.string(), z.string()).nullable(),
@@ -22,7 +30,8 @@ function paymentJournal(db: Db, endpoint: string, digest: string): PaymentJourna
   let eventId: string;
   const query: Db["query"] = async (text, params) => {
     try { return await db.query(text, params); }
-    catch { throw new StopError("Durable store payment database operation failed; inspect saved state before retrying."); }
+    catch (error) { throw new StorePaymentDatabaseError(error, text.startsWith("SELECT") ? "read" : text.startsWith("INSERT") ? "claim"
+      : text.includes("state='done'") ? "done" : "prepare"); }
   };
   return {
     async claim(id, approvedDigest) {
@@ -77,17 +86,28 @@ export function createStorePaymentRunner(options: { db: Db; deps?: PaymentDeps; 
   const deps = options.deps ?? { fetch, createHeaders: walletHeaders(env),
     sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
     lookupTransaction: blockfrostLookup(env, fetch), log: () => {} };
-  return (proposal, endpoint, id, mandateExpiry) => payApproved(proposal, endpoint, deps, paymentJournal(options.db, endpoint, proposalDigest(proposal)), id, mandateExpiry, { retryPrepared: true });
+  return (proposal, endpoint, id, mandateExpiry, callOptions = {}) => payApproved(proposal, endpoint, deps,
+    paymentJournal(options.db, endpoint, proposalDigest(proposal)), id, mandateExpiry, { retryPrepared: true, ...callOptions });
 }
 
 let pool: Pool | undefined;
-export function storePaymentRunner(env: NodeJS.ProcessEnv = process.env): PaymentOperation {
+export function storePaymentDb(env: NodeJS.ProcessEnv = process.env): Db {
   if (!env.STORE_PAY_DATABASE_URL?.trim()) throw new StopError("Durable store payment database configuration missing.");
   if (!pool) {
-    pool = new Pool({ connectionString: env.STORE_PAY_DATABASE_URL, max: 2, connectionTimeoutMillis: 5000, idleTimeoutMillis: 10_000 });
+    pool = new Pool({ connectionString: env.STORE_PAY_DATABASE_URL, max: 2, connectionTimeoutMillis: 5000, idleTimeoutMillis: 10_000, query_timeout: 10_000 });
     // An idle connection error must not print connection strings or terminate the process.
-    pool.on("error", () => {});
+    pool.on("error", (error) => logStorePaymentFailure(error, "pool", env));
   }
-  const db: Db = { query: async (text, params) => ({ rows: (await pool!.query(text, params)).rows }) };
-  return createStorePaymentRunner({ db, env });
+  return { query: async (text, params) => ({ rows: (await pool!.query(text, params)).rows }) };
+}
+
+export function storePaymentRunner(env: NodeJS.ProcessEnv = process.env): PaymentOperation {
+  return createStorePaymentRunner({ db: storePaymentDb(env), env });
+}
+
+export async function isStorePaymentPrepared(db: Db, taskId: string): Promise<boolean> {
+  try {
+    const result = await db.query("SELECT state FROM store_payments WHERE task_id=$1", [taskId]);
+    return result.rows.length === 1 && result.rows[0].state === "prepared";
+  } catch (error) { throw new StorePaymentDatabaseError(error, "read"); }
 }

@@ -6,10 +6,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vite
 import { jcs, mandateDigest, proposalDigest, signReceipt, type MandateBundle, type SpendProposal } from "../guard";
 import { createDevMandate } from "../orchestrator/mandate";
 import type { PaymentDeps } from "../orchestrator/payment";
+import { StopError } from "../orchestrator/journal";
 import type { Db } from "../worker/db";
 import { createStorePaymentRunner } from "./store-payment-db.server";
 import { createLatteHandler } from "./store-seller.server";
-import { handleStorePay } from "./store-payment.server";
+import { handleStorePay as storePayService } from "./store-payment.server";
 import { hasStoreLiveKey, validateStoreMandate, STORE_PAYEE } from "./store-live.server";
 import { POST, maxDuration } from "../../app/api/store/pay/route";
 import { GET } from "../../app/api/store/latte/route";
@@ -40,9 +41,10 @@ beforeAll(async () => {
     state text NOT NULL CHECK (state IN ('signing','prepared','done')), proposal_digest text NOT NULL,
     headers jsonb, tx_hash text, payment jsonb, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`);
 }, 20_000);
-beforeEach(async () => { await db.query("TRUNCATE store_payments"); });
+beforeEach(async () => { await db.query("TRUNCATE store_payments"); vi.spyOn(console, "error").mockImplementation(() => {}); });
 afterAll(async () => { await database?.close(); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+const handleStorePay: typeof storePayService = (request, settings = {}) => storePayService(request, { db, ...settings });
 const bundle = () => createDevMandate({ payee: STORE_PAYEE, amount: "6500000" });
 const proposal: SpendProposal = { kind: "x402", requirements: { scheme: "exact", network: "cardano:preprod", asset: "lovelace",
   amount: "6500000", payTo: STORE_PAYEE, maxTimeoutSeconds: 600, extra: { confirmationPolicy: { l1Confirmations: 0 } } } };
@@ -194,7 +196,9 @@ it("redacts provider errors and disables payment when wallet configuration is mi
     pay: async () => { throw new Error(Object.values(env).join(" ")); } });
   expect(response.status).toBe(409);
   const text = await response.text(); for (const secret of [env.STORE_LIVE_KEY, env.ORCHESTRATOR_WALLET_MNEMONIC, env.BLOCKFROST_API_KEY_PREPROD]) expect(text).not.toContain(secret);
-  expect(log).not.toHaveBeenCalled(); expect(error).not.toHaveBeenCalled();
+  expect(log).not.toHaveBeenCalled(); expect(error).toHaveBeenCalledTimes(1);
+  const logged = JSON.stringify(error.mock.calls);
+  for (const secret of [env.STORE_LIVE_KEY, env.ORCHESTRATOR_WALLET_MNEMONIC, env.BLOCKFROST_API_KEY_PREPROD, env.STORE_PAY_DATABASE_URL]) expect(logged).not.toContain(secret);
   const fetcher = vi.fn<typeof fetch>();
   expect((await handleStorePay(request(), { env: { ...options, ORCHESTRATOR_WALLET_MNEMONIC: "" }, fetch: fetcher, pay: vi.fn() })).status).toBe(403);
   expect(fetcher).not.toHaveBeenCalled();
@@ -422,6 +426,80 @@ it("a slow fresh GET that consumes the remaining expiry allowance leaves no sign
   } });
   await expect(runner(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, expiry)).rejects.toThrow("Mandate expires");
   expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]); expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+});
+it("a failed done write after successful settlement recovers in the same request with one signature", async () => {
+  const b = bundle(); const paid = await payer(); let fail = true;
+  const faulty: Db = { query: (text, params) => {
+    if (fail && text.includes("UPDATE") && text.includes("state='done'")) {
+      fail = false;
+      throw Object.assign(new Error(Object.values(env).join(" ")), { code: "08006", detail: paid.headers });
+    }
+    return db.query(text, params);
+  } };
+  const pay = vi.fn(paid.runner(faulty));
+  const response = await handleStorePay(request(), { env: options, fetch: coreFetch(b), pay });
+  expect(response.status).toBe(200); expect(await response.json()).toEqual({ txHash: paid.txHash, status: "confirmed-on-chain" });
+  expect(pay).toHaveBeenCalledTimes(2); expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
+  expect((await db.query("SELECT state,payment FROM store_payments")).rows).toMatchObject([{ state: "done", payment: { txHash: paid.txHash } }]);
+  const log = vi.mocked(console.error).mock.calls;
+  expect(log).toHaveLength(1);
+  expect(log[0]).toEqual(["[store-pay] failure", { stage: "payment", errorClass: "StorePaymentDatabaseError", operation: "done", pgCode: "08006",
+    message: "Durable store payment database operation failed; inspect saved state before retrying." }]);
+  const logged = JSON.stringify(log);
+  for (const secret of [...Object.values(env), paid.headers["PAYMENT-SIGNATURE"]]) if (secret !== "test") expect(logged).not.toContain(secret);
+});
+it("same-request recovery is attempted once and preserves prepared bytes if the done write still fails", async () => {
+  const b = bundle(); const paid = await payer();
+  const faulty: Db = { query: (text, params) => {
+    if (text.includes("UPDATE") && text.includes("state='done'")) throw Object.assign(new Error("private SQL params"), { code: "40001" });
+    return db.query(text, params);
+  } };
+  const pay = vi.fn(paid.runner(faulty));
+  const response = await handleStorePay(request(), { env: options, fetch: coreFetch(b), pay });
+  expect(response.status).toBe(409); expect(pay).toHaveBeenCalledTimes(2); expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
+  expect((await db.query("SELECT state,headers FROM store_payments")).rows).toEqual([{ state: "prepared", headers: paid.headers }]);
+  expect(vi.mocked(console.error).mock.calls.map((call) => call[1])).toMatchObject([{ stage: "payment", pgCode: "40001" }, { stage: "recovery", pgCode: "40001" }]);
+});
+it("sanitized StopError logs retain known messages and omit arbitrary private text", async () => {
+  const response = await handleStorePay(request(), { env: options, fetch: coreFetch(bundle()), pay: async () => {
+    throw new StopError(`${env.STORE_LIVE_KEY} PAYMENT-SIGNATURE private SQL params`);
+  } });
+  expect(response.status).toBe(409);
+  expect(vi.mocked(console.error).mock.calls).toEqual([["[store-pay] failure", { stage: "payment", errorClass: "StopError", message: "Unrecognized StopError message omitted." }]]);
+});
+it("recovery cannot acquire a new claim if the prepared row disappears", async () => {
+  const paid = await payer();
+  await expect(paid.runner()(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, bundle().mandate.expiry,
+    { recoveryOnly: true })).rejects.toThrow("prepared payment unavailable for recovery; no signing");
+  expect(paid.sign).not.toHaveBeenCalled(); expect(paid.paymentFetch).not.toHaveBeenCalled();
+  expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]);
+});
+it("same-request recovery waits at most 90 seconds and retains the original bytes", async () => {
+  const b = bundle(); const paid = await payer(); const startedAt = Date.now(); let now = startedAt;
+  await db.query("INSERT INTO store_payments(task_id,event_id,state,proposal_digest,headers,tx_hash) VALUES($1,$2,'prepared',$3,$4,$5)",
+    [taskId, "event-complete", proposalDigest(proposal), JSON.stringify(paid.headers), paid.txHash]);
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const lookup = vi.fn(async () => false);
+  const fetchPaid = vi.fn(async (_url: string, init?: RequestInit) => {
+    expect(new Headers(init?.headers).get("PAYMENT-SIGNATURE")).toBe(paid.headers["PAYMENT-SIGNATURE"]);
+    return new Response("{}", { status: 503 });
+  });
+  const pay = vi.fn(paid.runner(undefined, { fetch: fetchPaid, lookupTransaction: lookup, sleep: async (ms) => { now += ms; } }))
+    .mockImplementationOnce(async () => { now += 195_000; throw new StopError("payment request deadline reached; saved state retained"); });
+  const response = await handleStorePay(request(), { env: options, fetch: coreFetch(b), pay });
+  expect(response.status).toBe(409); expect(now - startedAt).toBe(285_000); expect(pay).toHaveBeenCalledTimes(2);
+  expect(pay.mock.calls[1][4]).toEqual({ recoveryOnly: true, deadlineMs: startedAt + 285_000 });
+  expect(lookup.mock.calls.length).toBeGreaterThan(1); expect(fetchPaid).toHaveBeenCalledTimes(1); expect(paid.sign).not.toHaveBeenCalled();
+  expect((await db.query("SELECT state,headers,tx_hash FROM store_payments")).rows).toEqual([{ state: "prepared", headers: paid.headers, tx_hash: paid.txHash }]);
+});
+it("chain lookups receive a recovery deadline signal", async () => {
+  const paid = await payer();
+  await db.query("INSERT INTO store_payments(task_id,event_id,state,proposal_digest,headers,tx_hash) VALUES($1,$2,'prepared',$3,$4,$5)",
+    [taskId, "event", proposalDigest(proposal), JSON.stringify(paid.headers), paid.txHash]);
+  const lookup = vi.fn<PaymentDeps["lookupTransaction"]>(async () => true);
+  await expect(paid.runner(undefined, { lookupTransaction: lookup })(proposal, endpoint, { taskId, eventId: "event", action: "pay" },
+    bundle().mandate.expiry, { recoveryOnly: true, deadlineMs: Date.now() + 90_000 })).resolves.toMatchObject({ txHash: paid.txHash });
+  expect(lookup).toHaveBeenCalledTimes(1); expect(lookup.mock.calls[0][1]).toBeInstanceOf(AbortSignal); expect(paid.sign).not.toHaveBeenCalled();
 });
 it("validates a live Mandate cryptographically and rejects wrong signed payee/amount, asset, expiry and signature", () => {
   const b = bundle(); expect(validateStoreMandate(b)).toEqual(b);

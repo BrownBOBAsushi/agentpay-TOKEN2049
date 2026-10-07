@@ -3,7 +3,9 @@ import { z } from "zod";
 import { mandateDigest, proposalDigest, verifyReceipt } from "../guard";
 import { PaymentSchema } from "../orchestrator/transcript";
 import type { PaymentOperation } from "../orchestrator/payment";
-import { storePaymentRunner, StoreSigningInterruptedError, STORE_SIGNING_ERROR } from "./store-payment-db.server";
+import { createStorePaymentRunner, storePaymentDb, isStorePaymentPrepared, StoreSigningInterruptedError, STORE_SIGNING_ERROR } from "./store-payment-db.server";
+import { logStorePaymentFailure } from "./store-payment-errors.server";
+import type { Db } from "../worker/db";
 import { createCoreClient } from "../worker/core";
 import { loadReceipt } from "./receipt-data.server";
 import { hasStoreLiveKey, validateStoreMandate, STORE_AMOUNT, STORE_PAYEE } from "./store-live.server";
@@ -34,7 +36,9 @@ async function paymentEventId(taskId: string, digest: string, env: NodeJS.Proces
   throw new Error("Verified completion event unavailable.");
 }
 
-export async function handleStorePay(request: Request, options: { env?: NodeJS.ProcessEnv; fetch?: typeof fetch; pay?: PaymentOperation } = {}): Promise<Response> {
+export async function handleStorePay(request: Request, options: { env?: NodeJS.ProcessEnv; fetch?: typeof fetch; pay?: PaymentOperation; db?: Db } = {}): Promise<Response> {
+  const startedAt = Date.now();
+  let failureLogged = false;
   const env = options.env ?? process.env;
   if (!hasStoreLiveKey(request, env) || !env.ORCHESTRATOR_WALLET_MNEMONIC || !env.BLOCKFROST_API_KEY_PREPROD
     || !env.SOKOSUMI_API_URL || !env.SOKOSUMI_COWORKER_API_KEY || !env.GUARD_ADDRESS || !env.STORE_PAY_DATABASE_URL?.trim()) {
@@ -67,11 +71,29 @@ export async function handleStorePay(request: Request, options: { env?: NodeJS.P
     const endpoint = new URL("/api/store/latte", request.url);
     if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) throw new Error("Invalid store origin.");
     const eventId = await paymentEventId(taskId, data.digests.receipt, env, freshFetch);
-    const pay = options.pay ?? storePaymentRunner(env);
-    const payment = PaymentSchema.parse(await pay(data.proposal, endpoint.href, { taskId, eventId, action: "pay" }, bundle.mandate.expiry));
+    const db = options.db ?? storePaymentDb(env);
+    const pay = options.pay ?? createStorePaymentRunner({ db, env });
+    const id = { taskId, eventId, action: "pay" as const };
+    let payment;
+    try {
+      // Reserve roughly 90 s for one resumed recovery inside maxDuration 300.
+      payment = PaymentSchema.parse(await pay(data.proposal, endpoint.href, id, bundle.mandate.expiry, { deadlineMs: startedAt + 195_000 }));
+    } catch (error) {
+      logStorePaymentFailure(error, "payment", env); failureLogged = true;
+      if (error instanceof StoreSigningInterruptedError) throw error;
+      let prepared;
+      try { prepared = await isStorePaymentPrepared(db, taskId); }
+      catch (stateError) { logStorePaymentFailure(stateError, "state", env); throw stateError; }
+      if (!prepared) throw error;
+      try {
+        payment = PaymentSchema.parse(await pay(data.proposal, endpoint.href, id, bundle.mandate.expiry,
+          { recoveryOnly: true, deadlineMs: Math.min(Date.now() + 90_000, startedAt + 290_000) }));
+      } catch (recoveryError) { logStorePaymentFailure(recoveryError, "recovery", env); throw recoveryError; }
+    }
     // Return only validated public fields. Never expose provider/SDK errors, input, or headers.
     return Response.json({ txHash: payment.txHash, status: payment.status }, { headers });
   } catch (error) {
+    if (!failureLogged) logStorePaymentFailure(error, "request", env);
     if (error instanceof StoreSigningInterruptedError) return Response.json({ error: STORE_SIGNING_ERROR }, { status: 409, headers });
     return Response.json({ error: "Payment stopped. Verify the APPROVE receipt, configuration and durable store payment before retrying." }, { status: 409, headers });
   }
