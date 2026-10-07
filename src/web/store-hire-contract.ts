@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { MandateBundleSchema } from "../guard/bundle";
 import { StoreResultSchema } from "./store-contract";
 
 export const StoreTaskIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
 export const StoreHireSchema = z.discriminatedUnion("mode", [
-  StoreResultSchema.extend({ mode: z.literal("local"), note: z.string() }),
+  StoreResultSchema.extend({ mode: z.literal("local"), note: z.string(), live: z.literal(true).optional(), bundle: MandateBundleSchema.optional() }),
   z.object({ mode: z.literal("hired"), taskId: StoreTaskIdSchema, taskToken: z.string().min(1).max(1024), steps: z.array(z.string()),
-    proposal: StoreResultSchema.shape.proposal, local: StoreResultSchema }),
+    proposal: StoreResultSchema.shape.proposal, local: StoreResultSchema, live: z.literal(true).optional(), bundle: MandateBundleSchema.optional() }),
 ]);
 export const StoreHireStatusSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("pending") }),

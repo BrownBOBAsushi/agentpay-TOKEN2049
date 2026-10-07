@@ -20,16 +20,20 @@ export function issueStoreTaskToken(binding: Binding, key: Buffer, nowSec: numbe
   return `${Buffer.from(payload, "utf8").toString("base64url")}.${signature}`;
 }
 export function verifyStoreTaskToken(token: string | null | undefined, key: Buffer, binding: Binding, nowSec: number): boolean {
+  const payload = readStoreTaskToken(token, key, nowSec);
+  return !!payload && payload.taskId === binding.taskId && payload.mandateDigest === binding.mandateDigest
+    && payload.proposalDigest === binding.proposalDigest;
+}
+// Only authenticated, canonical, unexpired claims may select a live Task's Mandate digest.
+export function readStoreTaskToken(token: string | null | undefined, key: Buffer, nowSec: number): z.infer<typeof payloadSchema> | null {
   try {
-    if (!token || token.length > 1024 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(token)) return false;
+    if (!token || token.length > 1024 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(token)) return null;
     const [encoded, signature] = token.split(".");
     const bytes = Buffer.from(encoded, "base64url"), supplied = Buffer.from(signature, "base64url");
-    if (bytes.toString("base64url") !== encoded || supplied.toString("base64url") !== signature || supplied.length !== 32) return false;
+    if (bytes.toString("base64url") !== encoded || supplied.toString("base64url") !== signature || supplied.length !== 32) return null;
     const expected = createHmac("sha256", key).update(bytes).digest();
-    if (!timingSafeEqual(expected, supplied)) return false;
+    if (!timingSafeEqual(expected, supplied)) return null;
     const text = bytes.toString("utf8"), payload = payloadSchema.parse(JSON.parse(text));
-    return text === jcs(payload) && payload.exp > nowSec && payload.exp <= nowSec + STORE_TASK_TOKEN_TTL
-      && payload.taskId === binding.taskId && payload.mandateDigest === binding.mandateDigest
-      && payload.proposalDigest === binding.proposalDigest;
-  } catch { return false; }
+    return text === jcs(payload) && payload.exp > nowSec && payload.exp <= nowSec + STORE_TASK_TOKEN_TTL ? payload : null;
+  } catch { return null; }
 }

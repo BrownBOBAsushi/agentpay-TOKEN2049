@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type Ref } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type Ref } from "react";
 import Link from "next/link";
 import type { MandateBundle } from "../guard/bundle";
 import { STORE_INJECTION, STORE_RECEIPT, STORE_TRANSACTION } from "./store-contract";
 import { attackerAddress } from "./store-addresses";
-import { focusStoreVerdict, hiddenStoreComment, type StorePresentation } from "./store-browser";
+import { createStoreLiveAccess, focusStoreVerdict, hiddenStoreComment, type StorePresentation } from "./store-browser";
 import { hireStoreFromBrowser } from "./store-hire-browser";
 import { Cheque } from "./Cheque";
 import { Stamp } from "./Stamp";
@@ -42,7 +42,7 @@ export function StoreVerdict({ bundle, result, testKey, headingRef }: {
     <header className={styles.bankHeading}><div><Link href="/">AgentPay Guard</Link><h2 id="store-verdict-title" tabIndex={-1} ref={headingRef}>The Guard {returned ? "returns" : "clears"} the cheque.</h2></div>
       <p>{returned ? "REFUSE" : "APPROVE"}</p>
     </header>
-    <p className={styles.honestNote}>The agent is scripted to obey the page. The check is the real AgentPay Guard code on a {testKey ? "test-key signature" : "real wallet signature"}. The Guard runs as a Coworker on Sokosumi. No money moves here.</p>
+    <p className={styles.honestNote}>The agent is scripted to obey the page. The check is the real AgentPay Guard code on a {testKey ? "test-key signature" : "real wallet signature"}. The Guard runs as a Coworker on Sokosumi. {result.txHash ? "Paid on Cardano preprod." : result.live ? "Live payment needs a verified signed APPROVE." : "No money moves here."}</p>
     {result.note && <p className={styles.honestNote}>{result.note}</p>}
     <div className={receipt.receiptScene}>
       <section className={receipt.cheques} aria-label="Signed Mandate and AI Spend Proposal">
@@ -65,12 +65,16 @@ export function StoreVerdict({ bundle, result, testKey, headingRef }: {
             <span className={`value ${receipt.identifier} ${styles.slipValue}`}>{row.field === "amount" ? `${atomicToDecimal(row.proposed)} tADA` : row.proposed}</span></div>
         </section>)}
         {returned ? <><ul className={receipt.reasonCodes}>{result.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul><p>No payment made.</p></>
-          : <><p>In the full flow the agent now pays over x402</p><div className={receipt.slipSettlement}>
+          : result.live ? <div className={receipt.slipSettlement}>
+            <p>{result.txHash ? "Paid on Cardano preprod" : result.note ?? "Payment not confirmed here"}</p>
+            {result.txHash && <><span className={`value ${styles.slipValue}`}>{result.txHash}</span>
+              <a href={`https://preprod.cardanoscan.io/transaction/${result.txHash}`} referrerPolicy="no-referrer">View payment on Cardanoscan (preprod)</a></>}
+          </div> : <><p>In the full flow the agent now pays over x402</p><div className={receipt.slipSettlement}>
             <p>Recorded paid run</p><a href={STORE_RECEIPT}>Read the real Guard Receipt</a><a href={STORE_TRANSACTION}>View the real payment on Cardanoscan (preprod)</a>
           </div></>}
         {result.taskId && <div className={receipt.slipSettlement}>
           <p>{result.receiptValid ? "Signed Guard Receipt verified" : "Local check fallback"}</p>
-          <a href={`https://preprod.sokosumi.com/tasks/${result.taskId}`}>Open the Task on Sokosumi</a>
+          <a href={`https://preprod.sokosumi.com/tasks/${result.taskId}`} referrerPolicy="no-referrer">Open the Task on Sokosumi</a>
           <p>your Sokosumi workspace (sign-in)</p>
           <a href={`/receipt/${result.taskId}`}>{result.receiptValid ? "Signed Receipt (public)" : "Receipt page (public)"}</a>
         </div>}
@@ -93,26 +97,45 @@ export function StoreClient({ bundle, testKey }: { bundle: MandateBundle; testKe
   const [revealed, setRevealed] = useState(false), [pending, setPending] = useState(false);
   const [result, setResult] = useState<StorePresentation | null>(null), [error, setError] = useState("");
   const [steps, setSteps] = useState<string[]>([]);
+  const [liveAccess] = useState(() => createStoreLiveAccess(() => window.location.href,
+    (url) => window.history.replaceState(window.history.state, "", url)));
+  const liveKey = useSyncExternalStore(liveAccess.subscribe, liveAccess.getSnapshot, liveAccess.getServerSnapshot);
+  const [uploadedBundle, setUploadedBundle] = useState<unknown>();
+  const [uploadLoaded, setUploadLoaded] = useState(false), [loadingUpload, setLoadingUpload] = useState(false);
   const busy = useRef(false), heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (result && heading.current) focusStoreVerdict(heading.current, window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, [result]);
   async function send() {
-    if (busy.current) return;
+    if (busy.current || loadingUpload) return;
     busy.current = true; setPending(true); setResult(null); setError(""); setSteps([]);
-    try { setResult(await hireStoreFromBrowser(enabled ? injection : null, { onSteps: setSteps })); }
-    catch { setError("Guard check could not finish. Try sending again."); }
+    try { setResult(await hireStoreFromBrowser(enabled ? injection : null, { onSteps: setSteps, liveKey, mandateBundle: uploadedBundle })); }
+    catch { setError(liveKey ? "Live hire stopped. Load a valid, unexpired signed Mandate and check the store. No automatic hire or payment retry was sent."
+      : "Guard check could not finish. Try sending again."); }
     finally { busy.current = false; setPending(false); }
   }
+  async function loadMandate(file?: File) {
+    setUploadedBundle(undefined); setUploadLoaded(false); setResult(null); setError("");
+    if (!file) return;
+    setLoadingUpload(true);
+    try {
+      if (file.size > 65_536) throw new Error();
+      const input: unknown = JSON.parse(await file.text());
+      setUploadedBundle(input); setUploadLoaded(true);
+    } catch { setError("Could not read bundle.json. Load a signed Mandate JSON file under 64 KB."); }
+    finally { setLoadingUpload(false); }
+  }
+  const disabled = pending || loadingUpload;
   return <>
     <section className={styles.shop} aria-label="The Corner Store">
       <div className={styles.shopInner}>
         <header className={styles.shopHeader}><h1><span aria-hidden="true">☕</span> The Corner Store</h1><p>small orders, fast — not affiliated with AgentPay</p></header>
+        {liveKey && <StoreLiveControls disabled={disabled} loaded={uploadLoaded} onLoad={(file) => void loadMandate(file)} />}
         <article className={styles.product} aria-labelledby="latte-title">
           <div className={styles.productImage} aria-hidden="true" />
           <h2 id="latte-title">Latte</h2><p className={styles.price}>6.50 tADA</p><p className={styles.currencyNote}>preprod test ADA stands in for SGD</p>
           <ProductDescription injection={enabled ? injection : null} revealed={revealed} disabled={pending} onReveal={() => setRevealed(!revealed)} />
-          <button type="button" className={styles.buy} disabled={pending} onClick={() => void send()}>Buy for 6.50 tADA <span aria-hidden="true">→</span></button>
+          <button type="button" className={styles.buy} disabled={disabled} onClick={() => void send()}>Buy for 6.50 tADA <span aria-hidden="true">→</span></button>
         </article>
         <form className={styles.controls} onSubmit={(event) => { event.preventDefault(); void send(); }}>
           <fieldset disabled={pending}><legend>Attacker injection</legend>
@@ -124,8 +147,8 @@ export function StoreClient({ bundle, testKey }: { bundle: MandateBundle; testKe
             <p id="store-injection-count" className={styles.counter}>{injection.length}/500 characters</p>
           </fieldset>
           <p className={styles.chat}><strong>You → your AI:</strong> Buy me a latte from The Corner Store.</p>
-          <button type="submit" className={styles.send} disabled={pending}>{pending ? "Checking with the Guard…" : "Send to my AI"}</button>
-          <p className={styles.previewNote}>{testKey ? "Test-key Mandate for this preview. " : "Human wallet-signed Mandate. "}The Guard runs as a Coworker on Sokosumi. No money moves here.</p>
+          <button type="submit" className={styles.send} disabled={disabled}>{pending ? "Checking with the Guard…" : "Send to my AI"}</button>
+          <p className={styles.previewNote}>{testKey ? "Test-key Mandate for this preview. " : "Human wallet-signed Mandate. "}The Guard runs as a Coworker on Sokosumi. {liveKey ? "Live mode pays preprod test ADA only after a verified signed APPROVE. Use a fresh Mandate for each paid run." : "No money moves here."}</p>
           {error && <p role="alert" className={styles.error}>{error}</p>}
           <p role="status" className={styles.status}>{pending ? "The scripted AI is presenting the proposal to the real Guard." : result ? `Guard Check: ${result.verdict}` : ""}</p>
         </form>
@@ -133,6 +156,16 @@ export function StoreClient({ bundle, testKey }: { bundle: MandateBundle; testKe
       </div>
     </section>
     {pending && steps.length > 0 && <div className={`${receipt.page} ${styles.bank}`}><StoreAgentLog steps={steps} live /></div>}
-    {result && <StoreVerdict bundle={bundle} result={result} testKey={testKey} headingRef={heading} />}
+    {result && <StoreVerdict bundle={result.bundle ?? bundle} result={result} testKey={result.bundle ? false : testKey} headingRef={heading} />}
   </>;
+}
+
+export function StoreLiveControls({ disabled, loaded, onLoad }: { disabled: boolean; loaded: boolean; onLoad: (file?: File) => void }) {
+  return <section className={styles.liveControls} aria-label="Live store payment">
+    <span className={styles.liveTag}>LIVE</span>
+    <label htmlFor="store-mandate-file">Load signed Mandate (bundle.json)</label>
+    <input id="store-mandate-file" type="file" accept=".json,application/json" disabled={disabled}
+      onChange={(event) => onLoad(event.target.files?.[0])} aria-describedby="store-mandate-help" />
+    <p id="store-mandate-help">{loaded ? "Mandate file loaded; the server will verify its signature before hiring." : "Use a fresh signed Mandate for 6.5 tADA to The Corner Store."}</p>
+  </section>;
 }
