@@ -1,4 +1,21 @@
-# HANDOFF — orch session 2 → next session (2026-10-07, morning SGT)
+# HANDOFF — orch session 3 (2026-10-07, ~13:45 SGT)
+
+> Session 3 status (supersedes "Where we are" / "Next steps" below where they conflict).
+- Roles this session: **sol builds, astra reviews** (user override, WORKFLOW).
+- **M4 done**: T-017 (seller + Orchestrator), T-019 (wait for chain), T-018 (`/demo`) all astra APPROVE and
+  merged locally; S3 done with a real Lace bundle (DEC-T15). 431 tests. Evidence: EVIDENCE.md "M4".
+- **JARVIS invariant: no AI push to main.** All work is on branch `release/m4-demo` → **PR #1**
+  (https://github.com/BrownBOBAsushi/agentpay-TOKEN2049/pull/1). **The user merges it.** Local `main`
+  (worktree `scratchpad/wt-main`) = `0c3fef5`; the PR branch adds `vercel.json` + docs.
+- **Deployed** to Vercel production (user said "deploy"): all routes 200, live receipts load, Vercel rule OK.
+- **User still to do:** record the video (runbook `docs/DEMO.md`; recording folder `~/Github/agentpay-demo`,
+  Lace Mandate valid to 23:59 SGT, run S2 before S1), merge PR #1, slides, submit (write-up draft
+  `docs/WRITEUP.md`), Sokosumi listing URL + event workspace ID, move seeds out of `~/.masumi-seed-backup.log`.
+- After recording: optionally copy the user's real S1/S2 transcripts from `~/Github/agentpay-demo/runs/` to
+  `public/demo-runs/` and redeploy (current ones are real preprod rehearsal runs with a test-key Mandate).
+- Auto mode: a safety check started refusing actions mid-session; default permission mode worked.
+
+## Previous: orch session 2 → session 3 (2026-10-07, morning SGT)
 
 > Read with `CLAUDE.md` (Read first list), `docs/WORKFLOW.md`, `docs/OPS.md`, `docs/PLAN.md`,
 > `docs/EVIDENCE.md`. Deadline: **7 Oct 23:59 SGT (submit by 22:00)**.
