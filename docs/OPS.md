@@ -38,7 +38,7 @@
 | `SOKOSUMI_COWORKER_API_KEY` | repo `.env.local` (0600) + macOS vault via `sokosumi runtime key-import` |
 | Blockfrost preprod key | MPS `.env` and repo `.env.local` |
 | MPS `ADMIN_KEY`, `ENCRYPTION_KEY`, `DATABASE_URL` | `~/Github/masumi-payment-service/.env` (0600). `ENCRYPTION_KEY` decrypts the wallet keys: back it up |
-| Wallet mnemonics (seed output) | `~/.masumi-seed-backup.log` (0600) until the human copies them to a password manager and deletes it |
+| Wallet mnemonics (seed output) | User's password manager (moved 2026-10-07 ~23:20 SGT; `~/.masumi-seed-backup.log` deleted, verified absent) |
 | MPS runtime token for the worker (`ReadAndPay`, selling wallet) | repo `.env.local` + Railway `agentpay-guard-worker` variables |
 | Hosted MPS secrets (`ENCRYPTION_KEY`, `ADMIN_KEY`, Blockfrost) | Railway `masumi-payment-service` variables (copied from local MPS `.env` via stdin, never printed) |
 | Hosted Worker secrets | Railway `agentpay-guard-worker` variables (copied from `.env.local` via stdin); `DATABASE_URL` is a Railway reference to `Postgres` |
@@ -141,9 +141,9 @@ record Task ID + Railway log line in EVIDENCE.md; update "Where things run" and 
 
 ## Open human tasks
 
-1. Copy mnemonics + MPS `.env` to a password manager, then `rm ~/.masumi-seed-backup.log`.
-2. Fund the purchasing wallet `addr_test1qq33kw…ghzlc7` at dispenser.masumi.network (for the Orchestrator / buyer rehearsal).
-3. Watch for the event-workspace approval email; then run the event steps in `MASUMI-DIGEST.md` §1 step 12.
+1. ~~Copy mnemonics + MPS `.env` to a password manager, then `rm ~/.masumi-seed-backup.log`.~~ **Done 2026-10-07** (user; file verified absent).
+2. ~~Fund the purchasing wallet `addr_test1qq33kw…ghzlc7`~~ **Superseded:** the Orchestrator uses its own wallet `addr_test1qrakfmhm…lsvx3jy5` (faucet-funded 2026-10-07, EVIDENCE M4).
+3. ~~Event-workspace approval~~ **Done:** the Coworker is public in the token2049 workspace (organisers, 7 Oct); showcase Task `01a116e1-6147-7144-94b8-c0313e0deb26` completed there (README "On-chain proof").
 4. ~~Railway account (M2).~~ Done. Optional: turn off the Postgres public TCP proxy.
 
 ## `/store` live mode (7 Oct, DEC-T17/T18) — names only
