@@ -45,7 +45,7 @@ export function createStoreHireService(options: { bundle: MandateBundle; env: ()
       let bundle = options.bundle;
       if (live) {
         try { bundle = validateStoreMandate("mandateBundle" in parsed.data && parsed.data.mandateBundle !== undefined
-          ? parsed.data.mandateBundle : bundle, Math.floor(now() / 1000)); }
+          ? parsed.data.mandateBundle : bundle, { nowSec: Math.floor(now() / 1000) }); }
         catch { return json({ error: "Load a valid, unexpired signed Mandate for 6.5 tADA to The Corner Store." }, 400); }
       }
       let prediction = runStoreCheck(parsed.data.injection, bundle, Math.floor(now() / 1000));
