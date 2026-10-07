@@ -5,7 +5,8 @@ import Link from "next/link";
 import type { MandateBundle } from "../guard/bundle";
 import { STORE_INJECTION, STORE_RECEIPT, STORE_TRANSACTION } from "./store-contract";
 import { attackerAddress } from "./store-addresses";
-import { checkStoreFromBrowser, focusStoreVerdict, hiddenStoreComment, type StorePresentation } from "./store-browser";
+import { focusStoreVerdict, hiddenStoreComment, type StorePresentation } from "./store-browser";
+import { hireStoreFromBrowser } from "./store-hire-browser";
 import { Cheque } from "./Cheque";
 import { Stamp } from "./Stamp";
 import { ReturnItem } from "./LandingScene";
@@ -41,7 +42,8 @@ export function StoreVerdict({ bundle, result, testKey, headingRef }: {
     <header className={styles.bankHeading}><div><Link href="/">AgentPay Guard</Link><h2 id="store-verdict-title" tabIndex={-1} ref={headingRef}>The Guard {returned ? "returns" : "clears"} the cheque.</h2></div>
       <p>{returned ? "REFUSE" : "APPROVE"}</p>
     </header>
-    <p className={styles.honestNote}>The agent is scripted to obey the page. The check is the real AgentPay Guard code on a {testKey ? "test-key signature" : "real wallet signature"}. No money moves here.</p>
+    <p className={styles.honestNote}>The agent is scripted to obey the page. The check is the real AgentPay Guard code on a {testKey ? "test-key signature" : "real wallet signature"}. The Guard runs as a Coworker on Sokosumi. No money moves here.</p>
+    {result.note && <p className={styles.honestNote}>{result.note}</p>}
     <div className={receipt.receiptScene}>
       <section className={receipt.cheques} aria-label="Signed Mandate and AI Spend Proposal">
         <div className={receipt.signedWrap}><Cheque bundle={bundle} heading={<h2>Signed Mandate</h2>} payeeName="The Corner Store" signatureNote={signatureNote} tilt={-1.2} /></div>
@@ -66,11 +68,23 @@ export function StoreVerdict({ bundle, result, testKey, headingRef }: {
           : <><p>In the full flow the agent now pays over x402</p><div className={receipt.slipSettlement}>
             <p>Recorded paid run</p><a href={STORE_RECEIPT}>Read the real Guard Receipt</a><a href={STORE_TRANSACTION}>View the real payment on Cardanoscan (preprod)</a>
           </div></>}
+        {result.taskId && <div className={receipt.slipSettlement}>
+          <p>{result.receiptValid ? "Signed Guard Receipt verified" : "Local check fallback"}</p>
+          <a href={`https://preprod.sokosumi.com/tasks/${result.taskId}`}>Open the Task on Sokosumi</a>
+          <p>your Sokosumi workspace (sign-in)</p>
+          <a href={`/receipt/${result.taskId}`}>{result.receiptValid ? "Signed Receipt (public)" : "Receipt page (public)"}</a>
+        </div>}
       </ReturnItem>
     </div>
-    <section className={`${receipt.ledger} ${styles.storeLedger}`} aria-labelledby="store-log-title"><h2 id="store-log-title">Agent log</h2>
-      <ol className={`value ${styles.agentLog}`}>{result.steps.map((step, index) => <li key={index}>{step}</li>)}</ol>
-    </section>
+    <StoreAgentLog steps={result.steps} />
+  </section>;
+}
+
+export function StoreAgentLog({ steps, live = false }: { steps: string[]; live?: boolean }) {
+  return <section className={`${receipt.ledger} ${styles.storeLedger}`} aria-labelledby="store-log-title">
+    <h2 id="store-log-title">Agent log</h2><ol className={`value ${styles.agentLog}`} aria-live={live ? "polite" : undefined}>
+      {steps.map((step, index) => <li key={index}>{step}</li>)}
+    </ol>
   </section>;
 }
 
@@ -78,14 +92,15 @@ export function StoreClient({ bundle, testKey }: { bundle: MandateBundle; testKe
   const [enabled, setEnabled] = useState(true), [injection, setInjection] = useState(STORE_INJECTION);
   const [revealed, setRevealed] = useState(false), [pending, setPending] = useState(false);
   const [result, setResult] = useState<StorePresentation | null>(null), [error, setError] = useState("");
+  const [steps, setSteps] = useState<string[]>([]);
   const busy = useRef(false), heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (result && heading.current) focusStoreVerdict(heading.current, window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, [result]);
   async function send() {
     if (busy.current) return;
-    busy.current = true; setPending(true); setResult(null); setError("");
-    try { setResult(await checkStoreFromBrowser(enabled ? injection : null)); }
+    busy.current = true; setPending(true); setResult(null); setError(""); setSteps([]);
+    try { setResult(await hireStoreFromBrowser(enabled ? injection : null, { onSteps: setSteps })); }
     catch { setError("Guard check could not finish. Try sending again."); }
     finally { busy.current = false; setPending(false); }
   }
@@ -110,13 +125,14 @@ export function StoreClient({ bundle, testKey }: { bundle: MandateBundle; testKe
           </fieldset>
           <p className={styles.chat}><strong>You → your AI:</strong> Buy me a latte from The Corner Store.</p>
           <button type="submit" className={styles.send} disabled={pending}>{pending ? "Checking with the Guard…" : "Send to my AI"}</button>
-          <p className={styles.previewNote}>{testKey ? "Test-key Mandate for this preview. " : "Human wallet-signed Mandate. "}A check only — no money moves here.</p>
+          <p className={styles.previewNote}>{testKey ? "Test-key Mandate for this preview. " : "Human wallet-signed Mandate. "}The Guard runs as a Coworker on Sokosumi. No money moves here.</p>
           {error && <p role="alert" className={styles.error}>{error}</p>}
           <p role="status" className={styles.status}>{pending ? "The scripted AI is presenting the proposal to the real Guard." : result ? `Guard Check: ${result.verdict}` : ""}</p>
         </form>
         <nav className={styles.shopNav} aria-label="AgentPay pages"><Link href="/">AgentPay Guard</Link><Link href="/demo">Watch the recorded runs</Link></nav>
       </div>
     </section>
+    {pending && steps.length > 0 && <div className={`${receipt.page} ${styles.bank}`}><StoreAgentLog steps={steps} live /></div>}
     {result && <StoreVerdict bundle={bundle} result={result} testKey={testKey} headingRef={heading} />}
   </>;
 }
