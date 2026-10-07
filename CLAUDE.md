@@ -57,6 +57,7 @@ Cardano "Agentic Commerce" track, 6–8 October 2026. Deadline: 7 Oct 23:59 SGT.
 - `npm run typecheck` — Check all TypeScript files without emitting code.
 - `npm run lint` — Check files with ESLint; warnings fail the check.
 - `npm test` — Run the Vitest test suite once.
-- `npm run worker` — Run the empty Guard Worker entry file.
-- `npm run orchestrator` — Run the empty Orchestrator entry file.
-- `npm run demo-seller` — Run the empty demo-seller entry file.
+- `npm run worker` — Run the Guard Worker (polls Sokosumi, runs Guard Checks; one replica only).
+- `npm run orchestrator -- --scenario S1|S2 --mandate <bundle.json>` — Run the demo buyer agent (README "Run the demo").
+- `npm run demo-seller` — Run the x402 demo seller on http://127.0.0.1:4021.
+- `npm run demo:mandate -- --payee <addr> --amount <lovelace>` — Make a test-key Mandate bundle in `runs/`.

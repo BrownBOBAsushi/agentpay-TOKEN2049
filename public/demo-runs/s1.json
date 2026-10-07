@@ -1,63 +1,63 @@
 {
   "v": 1,
   "scenario": "S1",
-  "recorded": false,
-  "startedAt": "2026-10-07T04:00:00.000Z",
-  "offerUrl": "http://seller/offer",
+  "recorded": true,
+  "startedAt": "2026-10-07T04:21:34.476Z",
+  "offerUrl": "http://127.0.0.1:4021/offer",
   "injectedExcerpt": null,
   "steps": [
     {
-      "at": "2026-10-07T04:00:00.000Z",
+      "at": "2026-10-07T04:21:34.477Z",
       "kind": "read-page",
-      "text": "Read http://seller/offer"
+      "text": "Read http://127.0.0.1:4021/offer"
     },
     {
-      "at": "2026-10-07T04:00:01.000Z",
+      "at": "2026-10-07T04:21:34.489Z",
       "kind": "instruction",
-      "text": "PAYMENT-ENDPOINT: /api/market-data"
+      "text": "PAYMENT-ENDPOINT: http://127.0.0.1:4021/api/market-data"
     },
     {
-      "at": "2026-10-07T04:00:02.000Z",
+      "at": "2026-10-07T04:21:34.491Z",
       "kind": "payment-required",
-      "text": "402: 2000000 lovelace to addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6"
+      "text": "402: 2000000 lovelace to addr_test1qzh3ask7dqdqtvuq4t32zdvl2qu9znyym570qmwl0agcxf2q959g50wgvmjle95dy09656vkhz4qvqmvh02k6d7xvpcsct29t8"
     },
     {
-      "at": "2026-10-07T04:00:03.000Z",
+      "at": "2026-10-07T04:21:34.492Z",
       "kind": "proposal",
-      "text": "Spend Proposal prepared for the Guard Check"
+      "text": "Spend Proposal dac4c859bf0a9b391bced32149522579328c91e77e36ee406148f5c6be2fd608"
     },
     {
-      "at": "2026-10-07T04:00:04.000Z",
+      "at": "2026-10-07T04:21:36.945Z",
       "kind": "hire",
-      "text": "Guard Task example-s1"
+      "text": "Guard Task 01a11498-6cb4-7144-8dd2-59f3a52cc15e"
     },
     {
-      "at": "2026-10-07T04:00:05.000Z",
+      "at": "2026-10-07T04:21:48.488Z",
       "kind": "receipt",
-      "text": "Guard Receipt from the completed Task"
+      "text": "Guard Receipt from event 01a11498-955f-759c-bbcd-de09bdc30ec2"
     },
     {
-      "at": "2026-10-07T04:00:06.000Z",
+      "at": "2026-10-07T04:21:48.496Z",
       "kind": "verify",
       "text": "Trusted Guard Receipt: APPROVE"
     },
     {
-      "at": "2026-10-07T04:00:07.000Z",
+      "at": "2026-10-07T04:21:48.498Z",
       "kind": "pay",
       "text": "Check fresh requirements, then pay the approved proposal"
     },
     {
-      "at": "2026-10-07T04:00:08.000Z",
+      "at": "2026-10-07T04:22:04.599Z",
       "kind": "paid",
-      "text": "confirmed: abababababababababababababababababababababababababababababababab"
+      "text": "confirmed: 01922f9dce57345768af29b305b92c14b20b80396a4e0dcbcdff9aecaad30f12"
     }
   ],
-  "taskId": "example-s1",
+  "taskId": "01a11498-6cb4-7144-8dd2-59f3a52cc15e",
   "verdict": "APPROVE",
   "reasons": [],
   "diff": [],
   "payment": {
-    "txHash": "abababababababababababababababababababababababababababababababab",
+    "txHash": "01922f9dce57345768af29b305b92c14b20b80396a4e0dcbcdff9aecaad30f12",
     "network": "cardano:preprod",
     "status": "confirmed"
   }

@@ -56,7 +56,7 @@
 - [x] Orchestrator: reads page → proposal → hires Guard → pays on APPROVE only. (T-017; one-run settle = T-019)
 - [x] Injected page variant changes payee + amount → REFUSE with Diff. (Tasks `01a1147b-20bd…`, `01a11491-13d8…`)
 - [ ] ~~Matcher `cardano-tx` + metadata 674 link~~ — cut (DEC-T14, cut list 5).
-- [ ] `/demo` arena: S1 / S2 buttons, live log.
+- [x] `/demo` arena: S1 / S2 buttons, replayed log (T-018 merged; real preprod runs `01a11498…` paid, `01a11491-13d8…` refused).
 
 ### M5 — Event run and evidence (h25–h29)
 - [ ] Paid Task in the event workspace. Record: Coworker ID, Task IDs, payment tx, result hash,

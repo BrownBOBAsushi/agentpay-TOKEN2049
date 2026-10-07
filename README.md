@@ -48,5 +48,26 @@ Run one Worker replica only; the Worker holds an advisory lock. The image uses
 Node.js 24 and starts with `node --import tsx src/worker/index.ts`.
 Follow [Runbook — move MPS + Worker to Railway](docs/OPS.md#runbook--move-mps--worker-to-railway-t-009).
 
-`npm run orchestrator` and `npm run demo-seller` run empty entry files. They exit
-without taking action. See [CLAUDE.md](CLAUDE.md#commands) for every script.
+## Run the demo (Orchestrator + x402 seller, Cardano preprod)
+
+The demo buyer agent (Orchestrator) reads an offer page, gets the seller's x402 `PAYMENT-REQUIRED`,
+hires the Guard with a Sokosumi Task, and pays over x402 only on a verified `APPROVE`
+([DEC-T14](docs/DECISIONS.md)). The "injected" page adds a hidden instruction that changes the payee
+and the amount: the Guard returns `REFUSE` with a Diff, and no money moves.
+
+Needs: `sokosumi` CLI logged in on preprod (`sokosumi --preprod auth login`), a funded preprod
+Orchestrator wallet, and a running Guard Worker. Set in `.env.local`: `ORCHESTRATOR_WALLET_MNEMONIC`,
+`BLOCKFROST_API_KEY_PREPROD`, `SOKOSUMI_COWORKER_ID`, `GUARD_ADDRESS`, `DEMO_SELLER_ADDRESS`
+(optional: `X402_FACILITATOR_URL`, default is the hosted preprod facilitator; `DEMO_SELLER_PORT`, default 4021).
+
+```bash
+npm run demo-seller          # terminal 1: http://127.0.0.1:4021/offer and /offer/injected
+# terminal 2: a Mandate bundle — sign one on /mandate in Lace/Eternl, or make a test-key one:
+npm run demo:mandate -- --payee "$DEMO_SELLER_ADDRESS" --amount 2000000 --minutes 60
+npm run orchestrator -- --scenario S2 --mandate <bundle.json>   # injected page → REFUSE, no payment
+npm run orchestrator -- --scenario S1 --mandate <bundle.json>   # honest page → APPROVE → paid
+```
+
+Run S2 before S1 with the same Mandate: an `APPROVE` consumes the Mandate nonce (DEC-T11).
+Each run writes a transcript to `runs/`. `/demo` replays two recorded preprod runs. Evidence (Task IDs,
+tx hashes): [docs/EVIDENCE.md](docs/EVIDENCE.md). See [CLAUDE.md](CLAUDE.md#commands) for every script.

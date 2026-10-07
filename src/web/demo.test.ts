@@ -27,11 +27,12 @@ it("renders S2 RETURNED, every Diff row, reasons and no payment", () => {
   expect(html).toContain(s2.injectedExcerpt); expect(html).toContain("pencil-ring");
   expect(html).not.toContain("https://preprod.cardanoscan.io/transaction/");
 });
-it.each(["S1", "S2"] as const)("clearly labels the %s placeholder as an example", (scenario) => {
-  expect(runs[scenario].recorded).toBe(false);
-  expect(render(scenario)).toContain("Example run — not yet recorded on preprod");
-  const html = renderToStaticMarkup(h(DemoRun, { run: { ...runs[scenario], recorded: true } }));
-  expect(html).not.toContain("Example run — not yet recorded on preprod");
+it.each(["S1", "S2"] as const)("labels an unrecorded %s run as an example, and a recorded one not", (scenario) => {
+  // The published runs are real preprod runs (docs/EVIDENCE.md M4).
+  expect(runs[scenario].recorded).toBe(true);
+  expect(render(scenario)).not.toContain("Example run — not yet recorded on preprod");
+  const html = renderToStaticMarkup(h(DemoRun, { run: { ...runs[scenario], recorded: false } }));
+  expect(html).toContain("Example run — not yet recorded on preprod");
 });
 it("rejects invalid transcript data with a file and field error, and wrong scenario files", () => {
   expect(() => parseDemoRun({ ...s1, payment: { ...s1.payment, txHash: "invalid" } }, "S1"))
