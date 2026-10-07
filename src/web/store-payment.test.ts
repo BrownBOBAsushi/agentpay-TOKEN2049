@@ -8,7 +8,8 @@ import { createDevMandate } from "../orchestrator/mandate";
 import type { PaymentDeps } from "../orchestrator/payment";
 import { StopError } from "../orchestrator/journal";
 import type { Db } from "../worker/db";
-import { createStorePaymentRunner } from "./store-payment-db.server";
+import { createStorePaymentRunner, type StorePaymentDb } from "./store-payment-db.server";
+import { blockfrostLookup, walletHeaders } from "../orchestrator/payment";
 import { createLatteHandler } from "./store-seller.server";
 import { handleStorePay as storePayService } from "./store-payment.server";
 import { hasStoreLiveKey, validateStoreMandate, STORE_PAYEE } from "./store-live.server";
@@ -43,7 +44,7 @@ beforeAll(async () => {
 }, 20_000);
 beforeEach(async () => { await db.query("TRUNCATE store_payments"); vi.spyOn(console, "error").mockImplementation(() => {}); });
 afterAll(async () => { await database?.close(); });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 const handleStorePay: typeof storePayService = (request, settings = {}) => storePayService(request, { db, ...settings });
 const bundle = () => createDevMandate({ payee: STORE_PAYEE, amount: "6500000" });
 const proposal: SpendProposal = { kind: "x402", requirements: { scheme: "exact", network: "cardano:preprod", asset: "lovelace",
@@ -448,6 +449,52 @@ it("a failed done write after successful settlement recovers in the same request
   const logged = JSON.stringify(log);
   for (const secret of [...Object.values(env), paid.headers["PAYMENT-SIGNATURE"]]) if (secret !== "test") expect(logged).not.toContain(secret);
 });
+it("a first payment persists prepared only once and completes without an unchanged rewrite", async () => {
+  const paid = await payer(); let prepares = 0;
+  const guarded: Db = { query: (text, params) => {
+    if (text.includes("SET state='prepared'") && ++prepares > 1) return Promise.resolve({ rows: [] });
+    return db.query(text, params);
+  } };
+  const pay = vi.fn(paid.runner(guarded));
+  const response = await handleStorePay(request(), { env: options, fetch: coreFetch(bundle()), pay });
+  expect(response.status).toBe(200); expect(await response.json()).toEqual({ txHash: paid.txHash, status: "confirmed" });
+  expect(prepares).toBe(1); expect(pay).toHaveBeenCalledTimes(1); expect(paid.sign).toHaveBeenCalledTimes(1);
+  expect(paid.sent).toEqual([paid.headers["PAYMENT-SIGNATURE"]]);
+});
+it("a prepared resume does not rewrite bytes and completes by hash despite a different JSON header representation", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  await db.query("INSERT INTO store_payments(task_id,event_id,state,proposal_digest,headers,tx_hash) VALUES($1,$2,'prepared',$3,$4,$5)",
+    [taskId, "event", proposalDigest(proposal), JSON.stringify(paid.headers), paid.txHash]);
+  let prepares = 0;
+  const guarded: Db = { query: (text, params) => {
+    if (text.includes("SET state='prepared'")) prepares++;
+    return db.query(text, params);
+  } };
+  const equivalentHeaders = { "payment-signature": paid.headers["PAYMENT-SIGNATURE"] };
+  const lookupTransaction = async () => {
+    // Same signature bytes, different JSON shape: emulate representation drift.
+    await db.query("UPDATE store_payments SET headers=$1::jsonb WHERE task_id=$2", [JSON.stringify(equivalentHeaders), taskId]);
+    return true;
+  };
+  await expect(paid.runner(guarded, { lookupTransaction })(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, expiry))
+    .resolves.toEqual({ txHash: paid.txHash, network: "cardano:preprod", status: "confirmed-on-chain" });
+  expect(prepares).toBe(0); expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+  expect((await db.query("SELECT state,headers,tx_hash FROM store_payments")).rows)
+    .toEqual([{ state: "done", headers: equivalentHeaders, tx_hash: paid.txHash }]);
+});
+it("completion still refuses if the saved transaction hash changes during confirmation", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  await db.query("INSERT INTO store_payments(task_id,event_id,state,proposal_digest,headers,tx_hash) VALUES($1,$2,'prepared',$3,$4,$5)",
+    [taskId, "event", proposalDigest(proposal), JSON.stringify(paid.headers), paid.txHash]);
+  const lookupTransaction = async () => {
+    await db.query("UPDATE store_payments SET tx_hash=$1 WHERE task_id=$2", ["ab".repeat(32), taskId]);
+    return true;
+  };
+  await expect(paid.runner(undefined, { lookupTransaction })(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, expiry))
+    .rejects.toThrow("durable payment state changed");
+  expect((await db.query("SELECT state FROM store_payments")).rows).toEqual([{ state: "prepared" }]);
+  expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+});
 it("same-request recovery is attempted once and preserves prepared bytes if the done write still fails", async () => {
   const b = bundle(); const paid = await payer();
   const faulty: Db = { query: (text, params) => {
@@ -500,6 +547,97 @@ it("chain lookups receive a recovery deadline signal", async () => {
   await expect(paid.runner(undefined, { lookupTransaction: lookup })(proposal, endpoint, { taskId, eventId: "event", action: "pay" },
     bundle().mandate.expiry, { recoveryOnly: true, deadlineMs: Date.now() + 90_000 })).resolves.toMatchObject({ txHash: paid.txHash });
   expect(lookup).toHaveBeenCalledTimes(1); expect(lookup.mock.calls[0][1]).toBeInstanceOf(AbortSignal); expect(paid.sign).not.toHaveBeenCalled();
+});
+it.each(["read", "claim", "prepared", "done"])("a delayed journal %s stops before the next operation and preserves durable state", async (stage) => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry; let now = Date.now(); const deadlineMs = now + 1000;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const delayed: StorePaymentDb = { async query<T>(text: string, params?: unknown[], callOptions?: { deadlineMs?: number }) {
+    expect(callOptions?.deadlineMs).toBe(deadlineMs);
+    const result = await db.query<T>(text, params);
+    if ((stage === "read" && text.startsWith("SELECT")) || (stage === "claim" && text.startsWith("INSERT"))
+      || (stage === "prepared" && text.includes("SET state='prepared'")) || (stage === "done" && text.includes("SET state='done'"))) now = deadlineMs;
+    return result;
+  } };
+  await expect(paid.runner(delayed)(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, expiry, { deadlineMs }))
+    .rejects.toThrow("payment request deadline reached");
+  const rows = (await db.query("SELECT state,headers FROM store_payments")).rows;
+  if (stage === "read") expect(rows).toEqual([]);
+  else expect(rows).toMatchObject([{ state: stage === "claim" ? "signing" : stage, headers: stage === "claim" ? null : paid.headers }]);
+  expect(paid.sign).toHaveBeenCalledTimes(stage === "read" || stage === "claim" ? 0 : 1);
+  expect(paid.sent).toHaveLength(stage === "done" ? 1 : 0);
+});
+it("a slow signer times out with its claim retained and late bytes never broadcast", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  let entered!: () => void; const signing = new Promise<void>((resolve) => { entered = resolve; });
+  let release!: () => void; const gate = new Promise<void>((resolve) => { release = resolve; });
+  const signer = vi.fn(async () => { entered(); await gate; return paid.sign(); });
+  vi.useFakeTimers();
+  const attempt = paid.runner(undefined, { createHeaders: signer })(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, expiry,
+    { deadlineMs: Date.now() + 1000 });
+  const stopped = expect(attempt).rejects.toThrow("payment request deadline reached");
+  await signing; await vi.advanceTimersByTimeAsync(1000); await stopped;
+  expect((await db.query("SELECT state,headers FROM store_payments")).rows).toEqual([{ state: "signing", headers: null }]);
+  await expect(paid.runner()(proposal, endpoint, { taskId, eventId: "retry", action: "pay" }, expiry)).rejects.toThrow("No second transaction will be signed");
+  release(); await vi.advanceTimersByTimeAsync(0);
+  expect(signer).toHaveBeenCalledTimes(1); expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(0);
+  expect((await db.query("SELECT state,headers FROM store_payments")).rows).toEqual([{ state: "signing", headers: null }]);
+});
+it("provider work receives the remaining budget and cannot release late wallet headers", async () => {
+  const expiry = bundle().mandate.expiry; const paid = await payer();
+  const payload = JSON.parse(Buffer.from(paid.headers["PAYMENT-SIGNATURE"], "base64").toString());
+  let finish!: (value: { transaction: string; nonce: string }) => void;
+  const provider = new Promise<{ transaction: string; nonce: string }>((resolve) => { finish = resolve; });
+  const factory = vi.fn<NonNullable<Parameters<typeof walletHeaders>[1]>>(() => ({ getAddress: () => guardAddress, buildAndSignPaymentTransaction: () => provider }));
+  const createHeaders = walletHeaders(options, factory);
+  vi.useFakeTimers();
+  const attempt = createHeaders({ x402Version: 2, resource: { url: endpoint }, accepts: [{ ...proposal.requirements,
+    network: "cardano:preprod", extra: proposal.requirements.extra! }] }, expiry,
+    { deadlineMs: Date.now() + 1500 });
+  const stopped = expect(attempt).rejects.toThrow("payment request deadline reached");
+  await vi.advanceTimersByTimeAsync(1500); await stopped;
+  expect(factory.mock.calls[0][0].provider.requestTimeoutMs).toBe(1500);
+  finish(payload.payload); await vi.advanceTimersByTimeAsync(0);
+  expect(factory).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(0);
+});
+it("a slow Blockfrost response cannot start reading its body after the cutoff", async () => {
+  const response = Response.json({ hash: "ab".repeat(32), block: "block", block_height: 1 });
+  const json = vi.spyOn(response, "json"); let now = Date.now(); const deadlineMs = now + 1000;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const lookup = blockfrostLookup(options, async () => { now = deadlineMs; return response; });
+  await expect(lookup("ab".repeat(32), undefined, { deadlineMs })).rejects.toThrow("preprod transaction lookup failed");
+  expect(json).not.toHaveBeenCalled();
+});
+it("a late Blockfrost result cannot start a done write after the recovery deadline", async () => {
+  const paid = await payer(); let now = Date.now(); const deadlineMs = now + 1000;
+  await db.query("INSERT INTO store_payments(task_id,event_id,state,proposal_digest,headers,tx_hash) VALUES($1,$2,'prepared',$3,$4,$5)",
+    [taskId, "event", proposalDigest(proposal), JSON.stringify(paid.headers), paid.txHash]);
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const run = paid.runner(undefined, { lookupTransaction: async () => { now = deadlineMs; return true; } });
+  await expect(run(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, bundle().mandate.expiry, { deadlineMs, recoveryOnly: true }))
+    .rejects.toThrow("payment request deadline reached");
+  expect((await db.query("SELECT state,headers FROM store_payments")).rows).toEqual([{ state: "prepared", headers: paid.headers }]);
+  expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+});
+it("settlement near the recovery cutoff cannot extend the request into its 5 second response reserve", async () => {
+  const b = bundle(); const paid = await payer(); let now = Date.now(); const startedAt = now;
+  await db.query("INSERT INTO store_payments(task_id,event_id,state,proposal_digest,headers,tx_hash) VALUES($1,$2,'prepared',$3,$4,$5)",
+    [taskId, "event-complete", proposalDigest(proposal), JSON.stringify(paid.headers), paid.txHash]);
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const delayed: StorePaymentDb = { async query<T>(text: string, params?: unknown[], callOptions?: { deadlineMs?: number }) {
+    expect(callOptions?.deadlineMs).toBe(startedAt + 295_000);
+    const result = await db.query<T>(text, params);
+    if (text === "SELECT state FROM store_payments WHERE task_id=$1") now = startedAt + 289_000;
+    if (text.includes("SET state='done'")) now = startedAt + 295_000;
+    return result;
+  } };
+  const pay = vi.fn(paid.runner(delayed, { lookupTransaction: async () => false, fetch: async (url, init) => {
+    const response = await paid.paymentFetch(url, init); now = startedAt + 294_000; return response;
+  } })).mockImplementationOnce(async () => { now += 195_000; throw new StopError("payment request deadline reached; saved state retained"); });
+  const response = await handleStorePay(request(), { env: options, fetch: coreFetch(b), db: delayed, pay });
+  expect(response.status).toBe(409); expect(now - startedAt).toBe(295_000); expect(pay).toHaveBeenCalledTimes(2);
+  expect(pay.mock.calls[1][4]).toEqual({ recoveryOnly: true, deadlineMs: startedAt + 295_000 });
+  expect((await db.query("SELECT state FROM store_payments")).rows).toEqual([{ state: "done" }]);
+  expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(1);
 });
 it("validates a live Mandate cryptographically and rejects wrong signed payee/amount, asset, expiry and signature", () => {
   const b = bundle(); expect(validateStoreMandate(b)).toEqual(b);
