@@ -1,7 +1,7 @@
 import { StoreResultSchema, type StoreResult } from "./store-contract";
 import { jcs } from "../guard/jcs";
 
-export type StorePresentation = StoreResult & { proposalDigest: string };
+export type StorePresentation = StoreResult & { proposalDigest: string; taskId?: string; receiptValid?: boolean; note?: string };
 export async function presentStoreResult(result: StoreResult): Promise<StorePresentation> {
   const bytes = new TextEncoder().encode("agentpay:proposal:v1\n" + jcs(result.proposal));
   const hash = await crypto.subtle.digest("SHA-256", bytes);

@@ -1,7 +1,15 @@
 import { guardCheck } from "../guard";
 import type { MandateBundle } from "../guard";
 import { runStoreAgent } from "./store-agent";
-import { StoreRequestSchema } from "./store-contract";
+import { StoreRequestSchema, StoreResultSchema } from "./store-contract";
+
+export function runStoreCheck(injection: string | null, bundle: MandateBundle, nowSec = Math.floor(Date.now() / 1000)) {
+  const agent = runStoreAgent(injection, bundle.mandate.payee);
+  const result = guardCheck({ bundle, proposal: agent.proposal }, { nowSec, nonceUsed: false });
+  const { payee, amount, asset, expiry, purpose, payer } = bundle.mandate;
+  return StoreResultSchema.parse({ ...agent, steps: [...agent.steps, `Instant pre-check (same Guard code): ${result.verdict}`], ...result,
+    mandate: { payee, amount, asset, expiry, purpose, payer } });
+}
 
 export async function handleStoreCheck(request: Request, bundle: MandateBundle): Promise<Response> {
   let body: unknown;
@@ -9,9 +17,5 @@ export async function handleStoreCheck(request: Request, bundle: MandateBundle):
   const parsed = StoreRequestSchema.safeParse(body);
   const headers = { "Cache-Control": "no-store" };
   if (!parsed.success) return Response.json({ error: "Send injection as a string of at most 500 characters, or null." }, { status: 400, headers });
-  const agent = runStoreAgent(parsed.data.injection, bundle.mandate.payee);
-  const result = guardCheck({ bundle, proposal: agent.proposal }, { nowSec: Math.floor(Date.now() / 1000), nonceUsed: false });
-  const { payee, amount, asset, expiry, purpose, payer } = bundle.mandate;
-  return Response.json({ ...agent, steps: [...agent.steps, `Real Guard Check: ${result.verdict}`], ...result,
-    mandate: { payee, amount, asset, expiry, purpose, payer } }, { headers });
+  return Response.json(runStoreCheck(parsed.data.injection, bundle), { headers });
 }
