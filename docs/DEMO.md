@@ -41,3 +41,22 @@ orch prepares: `next start` on :3000, `npm run demo-seller` on :4021, a clean `r
 | 7 | `/receipt/<S1 taskId>` + Cardanoscan | PAID; tx on preprod. |
 | 8 | `/receipt/01a110bb-e6aa-74a2-953c-269254af16ce` | Paid Coworker proof: escrow, result hash, collection. |
 | 9 | Close | Scale + next steps. |
+
+## Recording runbook v2 (7 Oct 15:30, live site + `/store`, DEC-T16)
+
+Browser: `https://agentpay-guard-cardano.vercel.app`. Terminal: `~/Github/agentpay-demo` (`npm run demo-seller` in a
+second window). Real hire + real payment stay in the terminal; the audience moment is `/store`.
+
+| # | Screen | Action |
+|---|---|---|
+| 1 | `/` | "Tomorrow you'll tell your AI: buy me a latte." |
+| 2 | `/mandate` (+ Lace) | The human signs once: 6.5 tADA to The Corner Store, latte, until 31 Dec. |
+| 3 | `/store` | The latte page. Click **Reveal hidden text**: the attacker's comment (28.00 to "Evil Store"). |
+| 4 | `/store` | **Send to my AI** → the AI obeys the page → real Guard check → RETURNED, rings on payee + amount, "No payment made". |
+| 5 | `/store` | Edit 28.00 → 500, send again → REFUSE. Switch injection OFF, send → CLEARED (what you signed). |
+| 6 | Terminal | `npm run orchestrator -- --scenario S2 --mandate src/guard/fixtures/bundle.wallet.json` → hired on Sokosumi → REFUSE. |
+| 7 | Terminal | Same with `--scenario S1` → APPROVE → paid over x402 → tx hash. Open `/receipt/<taskId>` + Cardanoscan. |
+| 8 | `/receipt/01a110bb-e6aa-74a2-953c-269254af16ce` | Paid Masumi Coworker: escrow, result hash on chain, collection. |
+| 9 | Close | Any agent hires the Guard before it pays. Next: on-chain vault. |
+
+Steps 6–7 use the market-data Mandate (`bundle.wallet.json`, valid to 23:59 SGT; S2 before S1).
