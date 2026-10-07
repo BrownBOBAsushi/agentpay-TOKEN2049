@@ -10,6 +10,7 @@ import { Journal, StopError, type ActionId } from "./journal";
 import { PaymentSchema, type Payment } from "./transcript";
 import { inspectHeaders, inspectPayment } from "./transaction";
 import { z } from "zod";
+import { PaymentBudget } from "./payment-budget";
 
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 const decoder = new x402HTTPClient(new x402Client());
@@ -38,13 +39,16 @@ export function approvedHttpClient(approved: PaymentRequirements, signer: Client
 export function walletHeaders(env: NodeJS.ProcessEnv,
   signerFactory: typeof toClientCardanoSigner = toClientCardanoSigner) {
   // Initialize only after APPROVE and after the fresh requirements check.
-  return async (required: PaymentRequired, mandateExpiry: number): Promise<Record<string, string>> => {
+  return async (required: PaymentRequired, mandateExpiry: number, options: PaymentCallOptions = {}): Promise<Record<string, string>> => {
+    const budget = new PaymentBudget(options.deadlineMs);
+    budget.remaining();
     const approved = required.accepts[0];
     if (!env.ORCHESTRATOR_WALLET_MNEMONIC || !env.BLOCKFROST_API_KEY_PREPROD) throw new StopError("preprod wallet configuration missing");
     const signer = signerFactory({ mnemonic: env.ORCHESTRATOR_WALLET_MNEMONIC, network: "cardano:preprod",
-      provider: { blockfrost: { baseUrl: "https://cardano-preprod.blockfrost.io/api/v0", projectId: env.BLOCKFROST_API_KEY_PREPROD } } });
+      provider: { blockfrost: { baseUrl: "https://cardano-preprod.blockfrost.io/api/v0", projectId: env.BLOCKFROST_API_KEY_PREPROD },
+        ...(options.deadlineMs === undefined ? {} : { requestTimeoutMs: Math.min(120_000, budget.remaining()) }) } });
     const http = approvedHttpClient(approved, signer);
-    const payload = await http.createPaymentPayload({ ...required, accepts: [approved] });
+    const payload = await budget.run(() => http.createPaymentPayload({ ...required, accepts: [approved] }));
     // Check after all provider/build/sign work, before releasing the signature header.
     inspectPayment(payload, SpendProposalSchema.parse({ kind: "x402", requirements: approved }), mandateExpiry);
     return http.encodePaymentSignatureHeader(payload);
@@ -52,17 +56,21 @@ export function walletHeaders(env: NodeJS.ProcessEnv,
 }
 
 export function blockfrostLookup(env: NodeJS.ProcessEnv, fetchTx: Fetch) {
-  return async (txHash: string, signal?: AbortSignal): Promise<boolean> => {
-    if (!env.BLOCKFROST_API_KEY_PREPROD || !/^[0-9a-f]{64}$/.test(txHash)) throw new StopError("preprod transaction lookup configuration missing");
+  return async (txHash: string, signal?: AbortSignal, options: PaymentCallOptions = {}): Promise<boolean> => {
+    const budget = new PaymentBudget(options.deadlineMs);
+    const projectId = env.BLOCKFROST_API_KEY_PREPROD;
+    if (!projectId || !/^[0-9a-f]{64}$/.test(txHash)) throw new StopError("preprod transaction lookup configuration missing");
     try {
-      const response = await fetchTx(`https://cardano-preprod.blockfrost.io/api/v0/txs/${txHash}`, {
-        headers: { project_id: env.BLOCKFROST_API_KEY_PREPROD }, redirect: "error",
-        signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]),
-      });
+      const response = await budget.run((requestSignal) => fetchTx(`https://cardano-preprod.blockfrost.io/api/v0/txs/${txHash}`, {
+        headers: { project_id: projectId }, redirect: "error",
+        signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : []), ...(requestSignal ? [requestSignal] : [])]),
+      }));
+      signal?.throwIfAborted();
       if (response.status === 404) return false;
       if (!response.ok) throw new Error("lookup failed");
       const tx = z.object({ hash: z.literal(txHash), block: z.string().min(1), block_height: z.number().int().nonnegative(),
-        valid_contract: z.boolean().optional() }).parse(await response.json());
+        valid_contract: z.boolean().optional() }).parse(await budget.run(() => response.json()));
+      signal?.throwIfAborted();
       return tx.valid_contract !== false;
     } catch {
       // Never include provider errors, HTTP bodies or the project key in output.
@@ -72,9 +80,9 @@ export function blockfrostLookup(env: NodeJS.ProcessEnv, fetchTx: Fetch) {
 }
 
 export type PaymentDeps = {
-  fetch: Fetch; createHeaders: (required: PaymentRequired, mandateExpiry: number) => Promise<Record<string, string>>;
+  fetch: Fetch; createHeaders: (required: PaymentRequired, mandateExpiry: number, options?: PaymentCallOptions) => Promise<Record<string, string>>;
   sleep: (ms: number) => Promise<void>;
-  lookupTransaction: (txHash: string, signal?: AbortSignal) => Promise<boolean>;
+  lookupTransaction: (txHash: string, signal?: AbortSignal, options?: PaymentCallOptions) => Promise<boolean>;
   log?: (line: string) => void;
 };
 export type PaymentCallOptions = { deadlineMs?: number; recoveryOnly?: boolean };
@@ -104,29 +112,25 @@ export function createPaymentRunner(options: { journalPath: string; deps?: Payme
 
 export async function payApproved(proposal: SpendProposal, endpoint: string, deps: PaymentDeps,
   journal: PaymentJournal, id: ActionId, mandateExpiry: number, options: PaymentCallOptions & { retryPrepared?: boolean } = {}): Promise<Payment> {
-  const remaining = () => options.deadlineMs === undefined ? Infinity : options.deadlineMs - Date.now();
-  const checkDeadline = () => { if (remaining() <= 0) throw new StopError("payment request deadline reached; saved state retained"); };
-  const requestFetch: Fetch = (url, init) => {
-    checkDeadline();
-    return deps.fetch(url, options.deadlineMs === undefined ? init : { ...init,
-      signal: AbortSignal.any([...(init?.signal ? [init.signal] : []), AbortSignal.timeout(Math.max(1, Math.floor(remaining())))]) });
-  };
-  const sleep = (ms: number) => { checkDeadline(); return deps.sleep(Math.min(ms, remaining())); };
-  const lookupTransaction = (txHash: string) => {
-    checkDeadline();
-    return options.deadlineMs === undefined ? deps.lookupTransaction(txHash)
-      : deps.lookupTransaction(txHash, AbortSignal.timeout(Math.max(1, Math.floor(remaining()))));
-  };
+  const budget = new PaymentBudget(options.deadlineMs);
+  const checkDeadline = () => { budget.remaining(); };
+  const requestFetch: Fetch = (url, init) => budget.run((signal) => deps.fetch(url, signal ? { ...init,
+    signal: AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])]) } : init));
+  const sleep = (ms: number) => budget.run(() => deps.sleep(Math.min(ms, budget.remaining())));
+  const lookupTransaction = (txHash: string) => budget.run((signal) => signal
+    ? deps.lookupTransaction(txHash, signal, { deadlineMs: options.deadlineMs }) : deps.lookupTransaction(txHash));
+  const save: PaymentJournal["set"] = (actionId, action) => budget.run(() => journal.set(actionId, action));
   checkDeadline();
   const digest = proposalDigest(proposal);
-  let saved: Awaited<ReturnType<PaymentJournal["get"]>> | undefined = await journal.get(id);
+  let saved: Awaited<ReturnType<PaymentJournal["get"]>> | undefined = await budget.run(() => journal.get(id));
   let fresh: Awaited<ReturnType<typeof readProposal>> | undefined;
   if (!saved) {
     if (options.recoveryOnly) throw new StopError("prepared payment unavailable for recovery; no signing");
     if (Math.floor(Date.now() / 1000) + proposal.requirements.maxTimeoutSeconds > mandateExpiry) {
       throw new StopError("Mandate expires before payment deadline; no payment");
     }
-    fresh = await readProposal(await requestFetch(endpoint, { redirect: "error", signal: AbortSignal.timeout(30_000) }));
+    const response = await requestFetch(endpoint, { redirect: "error", signal: AbortSignal.timeout(30_000) });
+    fresh = await budget.run(() => readProposal(response));
     if (proposalDigest(fresh.proposal) !== digest) throw new StopError("requirements changed; no payment signed");
     if (journal.claim) {
       checkDeadline();
@@ -134,10 +138,10 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
       if (Math.floor(Date.now() / 1000) + proposal.requirements.maxTimeoutSeconds > mandateExpiry) {
         throw new StopError("Mandate expires before payment deadline; no payment");
       }
-      if (!await journal.claim(id, digest)) {
+      if (!await budget.run(() => journal.claim!(id, digest))) {
         // Another instance may have paid while this instance checked the seller.
         // Recover its state; never sign or reclaim an ambiguous signing owner.
-        saved = await journal.get(id);
+        saved = await budget.run(() => journal.get(id));
         if (!saved) throw new StopError("durable payment claim unavailable; no signing");
       }
     }
@@ -151,19 +155,25 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
   }
   if (!saved) {
     if (!fresh) throw new StopError("fresh payment requirements missing; no signing");
-    await journal.set(id, { state: "signing", endpoint, proposalDigest: digest });
-    const headers = await deps.createHeaders({ ...fresh.required, accepts: [fresh.required.accepts[0]] }, mandateExpiry);
+    await save(id, { state: "signing", endpoint, proposalDigest: digest });
+    const required = { ...fresh.required, accepts: [fresh.required.accepts[0]] };
+    const headers = await budget.run(() => options.deadlineMs === undefined ? deps.createHeaders(required, mandateExpiry)
+      : deps.createHeaders(required, mandateExpiry, { deadlineMs: options.deadlineMs }));
     const txHash = inspectHeaders(headers, proposal, mandateExpiry);
     saved = { state: "prepared", headers, endpoint, proposalDigest: digest, txHash };
     // Persist before the first possible broadcast. Crash/retry uses these same bytes.
-    await journal.set(id, saved);
+    await save(id, saved);
   }
   if (!saved.headers) throw new StopError("saved payment signature missing");
   // Also check legacy prepared journals, which have no saved txHash.
   const txHash = inspectHeaders(saved.headers, proposal, mandateExpiry);
   if (saved.txHash && saved.txHash !== txHash) throw new StopError("saved transaction hash mismatch");
-  saved = { ...saved, txHash };
-  await journal.set(id, saved);
+  if (!saved.txHash) {
+    // Only legacy file journals need the hash backfilled. Durable/new prepared
+    // records already contain these exact bytes and must not be rewritten.
+    saved = { ...saved, txHash };
+    await save(id, saved);
+  }
   // inspectHeaders has already validated these bytes and required an upper validity bound.
   const signature = new Headers(saved.headers).get("PAYMENT-SIGNATURE")!;
   const payload = decodePaymentSignatureHeader(signature);
@@ -182,7 +192,7 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
       }
       if (found) {
         const payment: Payment = { txHash, network: "cardano:preprod", status: "confirmed-on-chain" };
-        await journal.set(id, { ...saved, state: "done", payment });
+        await save(id, { ...saved, state: "done", payment });
         return payment;
       }
       const now = Date.now();
@@ -202,9 +212,10 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
     if (!options.retryPrepared) return confirmOnChain();
     let found = false;
     try { found = await lookupTransaction(txHash); } catch { /* Inconclusive; reuse only these bytes. */ }
+    checkDeadline();
     if (found) {
       const payment: Payment = { txHash, network: "cardano:preprod", status: "confirmed-on-chain" };
-      await journal.set(id, { ...saved, state: "done", payment });
+      await save(id, { ...saved, state: "done", payment });
       return payment;
     }
     // After the signed TTL, only confirmation is useful. Never build a replacement.
@@ -238,7 +249,7 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
       reason = "invalid_settle_response";
     }
     if (payment) {
-      await journal.set(id, { ...saved, state: "done", payment });
+      await save(id, { ...saved, state: "done", payment });
       return payment;
     }
     // Only log the status and a bounded error token, never headers or response bodies.

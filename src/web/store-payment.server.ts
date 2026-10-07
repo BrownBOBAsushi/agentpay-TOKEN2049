@@ -9,6 +9,7 @@ import type { Db } from "../worker/db";
 import { createCoreClient } from "../worker/core";
 import { loadReceipt } from "./receipt-data.server";
 import { hasStoreLiveKey, validateStoreMandate, STORE_AMOUNT, STORE_PAYEE } from "./store-live.server";
+import { PaymentBudget } from "../orchestrator/payment-budget";
 
 const requestSchema = z.strictObject({ taskId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/) });
 const eventPageSchema = z.object({ data: z.array(z.object({ id: z.string().min(1).optional(), taskId: z.string().optional(),
@@ -38,6 +39,7 @@ async function paymentEventId(taskId: string, digest: string, env: NodeJS.Proces
 
 export async function handleStorePay(request: Request, options: { env?: NodeJS.ProcessEnv; fetch?: typeof fetch; pay?: PaymentOperation; db?: Db } = {}): Promise<Response> {
   const startedAt = Date.now();
+  const responseBudget = new PaymentBudget(startedAt + 295_000); // Leave 5 s to return the response.
   let failureLogged = false;
   const env = options.env ?? process.env;
   if (!hasStoreLiveKey(request, env) || !env.ORCHESTRATOR_WALLET_MNEMONIC || !env.BLOCKFROST_API_KEY_PREPROD
@@ -45,16 +47,17 @@ export async function handleStorePay(request: Request, options: { env?: NodeJS.P
     return Response.json({ error: "Live payment access denied." }, { status: 403, headers });
   }
   let body: unknown;
-  try { body = await request.json(); } catch { body = null; }
+  try { body = await responseBudget.run(() => request.json()); } catch { body = null; }
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) return Response.json({ error: "Send only a valid taskId." }, { status: 400, headers });
   try {
     const taskId = parsed.data.taskId;
     const fetcher = options.fetch ?? fetch;
     // Override viewer caching: only fresh Task inputs and a verified APPROVE can authorize payment.
-    const freshFetch: typeof fetch = (input, init) => fetcher(input, { ...init, cache: "no-store", next: { revalidate: 0 } });
-    const data = await loadReceipt(taskId, { origin: env.SOKOSUMI_API_URL, apiKey: env.SOKOSUMI_COWORKER_API_KEY,
-      guardAddress: env.GUARD_ADDRESS, fetch: freshFetch });
+    const freshFetch: typeof fetch = (input, init) => responseBudget.run((signal) => fetcher(input, { ...init, cache: "no-store",
+      next: { revalidate: 0 }, signal: AbortSignal.any([signal!, ...(init?.signal ? [init.signal] : [])]) }));
+    const data = await responseBudget.run(() => loadReceipt(taskId, { origin: env.SOKOSUMI_API_URL, apiKey: env.SOKOSUMI_COWORKER_API_KEY,
+      guardAddress: env.GUARD_ADDRESS, fetch: freshFetch }));
     if (data.kind !== "receipt" || data.example || !data.receiptValid || !data.signatureValid || !data.inputsBound || !data.sentinelOk
       || data.verdict !== "APPROVE" || data.taskId !== taskId || data.guardAddress !== env.GUARD_ADDRESS
       || !data.bundle || !data.proposal || !data.digests.receipt
@@ -70,26 +73,30 @@ export async function handleStorePay(request: Request, options: { env?: NodeJS.P
     }
     const endpoint = new URL("/api/store/latte", request.url);
     if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) throw new Error("Invalid store origin.");
-    const eventId = await paymentEventId(taskId, data.digests.receipt, env, freshFetch);
+    const eventId = await responseBudget.run(() => paymentEventId(taskId, data.digests.receipt!, env, freshFetch));
     const db = options.db ?? storePaymentDb(env);
     const pay = options.pay ?? createStorePaymentRunner({ db, env });
     const id = { taskId, eventId, action: "pay" as const };
     let payment;
     try {
       // Reserve roughly 90 s for one resumed recovery inside maxDuration 300.
-      payment = PaymentSchema.parse(await pay(data.proposal, endpoint.href, id, bundle.mandate.expiry, { deadlineMs: startedAt + 195_000 }));
+      const initialBudget = new PaymentBudget(startedAt + 195_000);
+      payment = PaymentSchema.parse(await initialBudget.run(() => pay(data.proposal!, endpoint.href, id, bundle.mandate.expiry,
+        { deadlineMs: initialBudget.deadlineMs })));
     } catch (error) {
       logStorePaymentFailure(error, "payment", env); failureLogged = true;
       if (error instanceof StoreSigningInterruptedError) throw error;
       let prepared;
-      try { prepared = await isStorePaymentPrepared(db, taskId); }
+      try { prepared = await isStorePaymentPrepared(db, taskId, responseBudget.deadlineMs); }
       catch (stateError) { logStorePaymentFailure(stateError, "state", env); throw stateError; }
       if (!prepared) throw error;
       try {
-        payment = PaymentSchema.parse(await pay(data.proposal, endpoint.href, id, bundle.mandate.expiry,
-          { recoveryOnly: true, deadlineMs: Math.min(Date.now() + 90_000, startedAt + 290_000) }));
+        const recoveryBudget = new PaymentBudget(Math.min(Date.now() + 90_000, responseBudget.deadlineMs!));
+        payment = PaymentSchema.parse(await recoveryBudget.run(() => pay(data.proposal!, endpoint.href, id, bundle.mandate.expiry,
+          { recoveryOnly: true, deadlineMs: recoveryBudget.deadlineMs })));
       } catch (recoveryError) { logStorePaymentFailure(recoveryError, "recovery", env); throw recoveryError; }
     }
+    responseBudget.remaining();
     // Return only validated public fields. Never expose provider/SDK errors, input, or headers.
     return Response.json({ txHash: payment.txHash, status: payment.status }, { headers });
   } catch (error) {
