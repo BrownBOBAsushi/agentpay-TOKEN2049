@@ -6,7 +6,7 @@ import { MandateBundleSchema, verifyMandate, type MandateBundle } from "../guard
 export const STORE_PAYEE = fixture.mandate.payee;
 export const STORE_AMOUNT = "6500000";
 
-export function hasStoreLiveKey(request: Request, env: NodeJS.ProcessEnv = process.env): boolean {
+export function hasStoreLiveKey(request: Request, env: Record<string, string | undefined> = process.env): boolean {
   const expected = env.STORE_LIVE_KEY;
   const supplied = request.headers.get("x-store-live-key");
   if (!expected || expected.length < 32 || !supplied) return false;

@@ -5,7 +5,7 @@ import testFixture from "../../src/guard/fixtures/bundle.valid.json";
 import { StoreClient } from "../../src/web/StoreClient";
 
 export const dynamic = "force-static";
-export const metadata: Metadata = { title: "The Corner Store · AgentPay Guard" };
+export const metadata: Metadata = { title: "The Corner Store · AgentPay Guard", referrer: "no-referrer" };
 const bundle = MandateBundleSchema.parse(fixture);
 export default function StorePage() {
   return <><a className="skip-link" href="#corner-store">Skip to the store</a><main id="corner-store">
