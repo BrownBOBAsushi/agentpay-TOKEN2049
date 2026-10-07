@@ -2,6 +2,8 @@ import { x402Client, x402HTTPClient } from "@x402/core/client";
 import type { PaymentRequired, PaymentRequirements } from "@x402/core/types";
 import { ExactCardanoScheme } from "@x402/cardano/exact/client";
 import { toClientCardanoSigner, type ClientCardanoSigner } from "@x402/cardano";
+import { SlotConfig, Time, Transaction } from "@evolution-sdk/evolution";
+import { decodePaymentSignatureHeader } from "@x402/core/http";
 import { SpendProposalSchema, proposalDigest, type SpendProposal } from "../guard";
 import { isPreprodBech32Address } from "../guard/bech32";
 import { Journal, StopError, type ActionId } from "./journal";
@@ -72,6 +74,7 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
   fetch: Fetch; createHeaders: (required: PaymentRequired, mandateExpiry: number) => Promise<Record<string, string>>;
   sleep: (ms: number) => Promise<void>;
   lookupTransaction: (txHash: string) => Promise<boolean>;
+  log?: (line: string) => void;
 }, journal: Journal, id: ActionId, mandateExpiry: number): Promise<Payment> {
   let saved = await journal.get(id);
   const resumed = saved?.state === "prepared";
@@ -101,11 +104,34 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
   if (saved.txHash && saved.txHash !== txHash) throw new StopError("saved transaction hash mismatch");
   saved = { ...saved, txHash };
   await journal.set(id, saved);
+  // inspectHeaders has already validated these bytes and required an upper validity bound.
+  const signature = new Headers(saved.headers).get("PAYMENT-SIGNATURE")!;
+  const payload = decodePaymentSignatureHeader(signature);
+  const ttl = Transaction.fromCBORBytes(Buffer.from(payload.payload.transaction as string, "base64")).body.ttl!;
+  const deadline = Time.slotToUnixTime(ttl, SlotConfig.getSlotConfig("Preprod")) + 60_000n;
+  const log = deps.log ?? console.log;
   const confirmOnChain = async (): Promise<Payment> => {
-    if (!await deps.lookupTransaction(txHash)) throw new StopError("saved transaction not found on preprod; signature retained, no new transaction");
-    const payment: Payment = { txHash, network: "cardano:preprod", status: "confirmed-on-chain" };
-    await journal.set(id, { ...saved, state: "done", payment });
-    return payment;
+    const startedAt = Date.now();
+    let nextLogAt = startedAt;
+    while (true) {
+      // Look up even an old prepared transaction once, so a resume can recover it.
+      let found = false;
+      try { found = await deps.lookupTransaction(txHash); } catch {
+        // A provider fault is inconclusive. Keep prepared and retry without exposing its details.
+      }
+      if (found) {
+        const payment: Payment = { txHash, network: "cardano:preprod", status: "confirmed-on-chain" };
+        await journal.set(id, { ...saved, state: "done", payment });
+        return payment;
+      }
+      const now = Date.now();
+      if (BigInt(now) >= deadline) throw new StopError("transaction expired unsettled; no payment");
+      if (now >= nextLogAt) {
+        log(`waiting for tx ${txHash} on preprod (${Math.floor((now - startedAt) / 1000)} s)`);
+        nextLogAt = now + 15_000;
+      }
+      await deps.sleep(Number(deadline - BigInt(now) < 5000n ? deadline - BigInt(now) : 5000n));
+    }
   };
   if (resumed) return confirmOnChain();
   const timeoutAt = Date.now() + 300_000;
@@ -118,23 +144,30 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
       await deps.sleep(3000);
       continue;
     }
-    let pending = false;
-    if (response.headers.has("PAYMENT-RESPONSE")) {
-      const settled = decoder.getPaymentSettleResponse((name) => response.headers.get(name));
-      pending = settled.errorReason === "settlement_pending" || settled.extra?.status === "pending";
-      if (response.ok && settled.success && !pending) {
-        if (settled.transaction !== txHash) throw new StopError("settlement transaction hash mismatch; saved signature retained");
-        const payment = PaymentSchema.parse({ txHash: settled.transaction, network: settled.network, status: settled.extra?.status ?? "confirmed" });
-        await journal.set(id, { ...saved, state: "done", payment });
-        return payment;
+    let reason = "unknown";
+    let payment: Payment | undefined;
+    try {
+      if (response.headers.has("PAYMENT-RESPONSE")) {
+        const settled = decoder.getPaymentSettleResponse((name) => response.headers.get(name));
+        reason = settled.errorReason ?? "unknown";
+        if (response.ok && settled.success === true && settled.transaction === txHash
+          && settled.errorReason !== "settlement_pending" && settled.extra?.status !== "pending") {
+          payment = PaymentSchema.parse({ txHash: settled.transaction, network: settled.network, status: settled.extra?.status ?? "confirmed" });
+        }
+      } else if (response.headers.has("PAYMENT-REQUIRED")) {
+        reason = decoder.getPaymentRequiredResponse((name) => response.headers.get(name)).error ?? "unknown";
       }
-    } else if (response.status === 402) {
-      const error = decoder.getPaymentRequiredResponse((name) => response.headers.get(name)).error;
-      if (error === "invalid_exact_cardano_payload_nonce_not_on_chain" || error === "nonce_not_on_chain") return confirmOnChain();
-      pending = error === "settlement_pending";
+    } catch {
+      reason = "invalid_settle_response";
     }
-    if (!pending) throw new StopError("payment did not settle; saved signature retained, no new transaction");
-    await deps.sleep(3000);
+    if (payment) {
+      await journal.set(id, { ...saved, state: "done", payment });
+      return payment;
+    }
+    // Only log the status and a bounded error token, never headers or response bodies.
+    const safeReason = typeof reason === "string" && /^[a-zA-Z0-9_.:-]{1,128}$/.test(reason) ? reason : "unknown";
+    log(`settle reply: ${response.status} ${safeReason}; waiting for chain`);
+    return confirmOnChain();
   }
   return confirmOnChain();
 }
