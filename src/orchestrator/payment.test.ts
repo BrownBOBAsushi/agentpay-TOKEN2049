@@ -184,6 +184,56 @@ it("waits through the signed TTL plus 60 seconds, then stops and keeps the prepa
   expect(logs).toEqual(["settle reply: 402 settlement_failed; waiting for chain",
     ...[0, 15, 30].map((seconds) => `waiting for tx ${signed.txHash} on preprod (${seconds} s)`)]);
 });
+it("retries rejected preprod lookups at the polling interval, then records the found tx without sending or signing again", async () => {
+  let clock = 1700000000000; vi.spyOn(Date, "now").mockImplementation(() => clock);
+  const signed = signedHeaders(); const saved = await journal(); const logs: string[] = [];
+  const sign = vi.fn(async () => signed.headers);
+  const fetchPaid = vi.fn(async (_url: string, init?: RequestInit) => init?.headers ? unpaid("settlement_failed") : unpaid());
+  const fetchTx = vi.fn<Fetch>(async (): Promise<Response> => {
+    expect(await saved.get(id)).toMatchObject({ state: "prepared", headers: signed.headers, txHash: signed.txHash });
+    if (fetchTx.mock.calls.length === 1) return new Response("synthetic-provider-detail", { status: 503 });
+    if (fetchTx.mock.calls.length === 2) throw new Error("synthetic-provider-detail");
+    return Response.json({ hash: signed.txHash, block: "cd".repeat(32), block_height: 123, valid_contract: true });
+  });
+  const sleep = vi.fn(async (ms: number) => { clock += ms; });
+  const lookupTransaction = blockfrostLookup({ NODE_ENV: "test", BLOCKFROST_API_KEY_PREPROD: "test-key" }, fetchTx);
+  await expect(payApproved(proposal, endpoint, { fetch: fetchPaid, createHeaders: sign, sleep, lookupTransaction,
+    log: (line) => logs.push(line) }, saved, id, expiry))
+    .resolves.toEqual({ txHash: signed.txHash, network: "cardano:preprod", status: "confirmed-on-chain" });
+  expect(await saved.get(id)).toMatchObject({ state: "done", payment: { txHash: signed.txHash, status: "confirmed-on-chain" } });
+  expect(fetchTx).toHaveBeenCalledTimes(3); expect(sleep.mock.calls).toEqual([[5000], [5000]]);
+  expect(fetchTx.mock.calls.map(([url]) => url)).toEqual(Array(3).fill(`https://cardano-preprod.blockfrost.io/api/v0/txs/${signed.txHash}`));
+  expect(fetchPaid).toHaveBeenCalledTimes(2); expect(sign).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(logs)).not.toContain("synthetic-provider-detail");
+  expect(JSON.stringify(logs)).not.toContain(signed.headers["PAYMENT-SIGNATURE"]);
+});
+it("retries transient lookup failures through TTL plus grace, then stops with prepared bytes and no provider details", async () => {
+  let clock = 1700000000000; vi.spyOn(Date, "now").mockImplementation(() => clock);
+  const signed = signedHeaders(); const saved = await journal(); const logs: string[] = [];
+  const sign = vi.fn(async () => signed.headers);
+  const fetchPaid = vi.fn(async (_url: string, init?: RequestInit) => {
+    if (!init?.headers) return unpaid();
+    clock += 640_750; return unpaid("settlement_failed");
+  });
+  const fetchTx = vi.fn<Fetch>(async (): Promise<Response> => {
+    expect((await saved.get(id))?.state).toBe("prepared");
+    if (fetchTx.mock.calls.length % 3 === 0) throw new DOMException("synthetic-provider-detail", "TimeoutError");
+    return new Response("synthetic-provider-detail", { status: fetchTx.mock.calls.length % 2 ? 429 : 503 });
+  });
+  const sleep = vi.fn(async (ms: number) => { clock += ms; });
+  const lookupTransaction = blockfrostLookup({ NODE_ENV: "test", BLOCKFROST_API_KEY_PREPROD: "test-key" }, fetchTx);
+  await expect(payApproved(proposal, endpoint, { fetch: fetchPaid, createHeaders: sign, sleep, lookupTransaction,
+    log: (line) => logs.push(line) }, saved, id, expiry)).rejects.toThrow("transaction expired unsettled; no payment");
+  expect(clock).toBe(1700000660000); expect(fetchTx).toHaveBeenCalledTimes(5);
+  expect(sleep.mock.calls).toEqual([[5000], [5000], [5000], [4250]]);
+  expect(fetchPaid).toHaveBeenCalledTimes(2); expect(sign).toHaveBeenCalledTimes(1);
+  expect(await saved.get(id)).toMatchObject({ state: "prepared", headers: signed.headers, txHash: signed.txHash });
+  expect((await saved.get(id))?.payment).toBeUndefined();
+  expect(logs).toEqual(["settle reply: 402 settlement_failed; waiting for chain",
+    ...[0, 15].map((seconds) => `waiting for tx ${signed.txHash} on preprod (${seconds} s)`)]);
+  expect(JSON.stringify(logs)).not.toContain("synthetic-provider-detail");
+  expect(JSON.stringify(logs)).not.toContain(signed.headers["PAYMENT-SIGNATURE"]);
+});
 it.each([200, 404, 401])("queries only Blockfrost preprod with an injected fetch (%s)", async (status) => {
   const signed = signedHeaders(); const fetchTx = vi.fn<Fetch>(async () => new Response(JSON.stringify({ hash: signed.txHash,
     block: "cd".repeat(32), block_height: 123, valid_contract: true }), { status }));

@@ -115,7 +115,11 @@ export async function payApproved(proposal: SpendProposal, endpoint: string, dep
     let nextLogAt = startedAt;
     while (true) {
       // Look up even an old prepared transaction once, so a resume can recover it.
-      if (await deps.lookupTransaction(txHash)) {
+      let found = false;
+      try { found = await deps.lookupTransaction(txHash); } catch {
+        // A provider fault is inconclusive. Keep prepared and retry without exposing its details.
+      }
+      if (found) {
         const payment: Payment = { txHash, network: "cardano:preprod", status: "confirmed-on-chain" };
         await journal.set(id, { ...saved, state: "done", payment });
         return payment;
