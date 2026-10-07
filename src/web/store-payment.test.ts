@@ -1,15 +1,15 @@
-import { mkdir, readFile, unlink } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { PGlite } from "@electric-sql/pglite";
 import { Address, CBOR, COSE, KeyHash, PrivateKey, SlotConfig, Time, Transaction, TransactionBody, TransactionHash } from "@evolution-sdk/evolution";
 import { encodePaymentSignatureHeader } from "@x402/core/http";
 import { NextRequest } from "next/server";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { jcs, mandateDigest, proposalDigest, signReceipt, type MandateBundle, type SpendProposal } from "../guard";
 import { createDevMandate } from "../orchestrator/mandate";
-import { createPaymentRunner } from "../orchestrator/payment";
+import type { PaymentDeps } from "../orchestrator/payment";
+import type { Db } from "../worker/db";
+import { createStorePaymentRunner } from "./store-payment-db.server";
 import { createLatteHandler } from "./store-seller.server";
-import { handleStorePay, STORE_JOURNAL_PATH } from "./store-payment.server";
+import { handleStorePay } from "./store-payment.server";
 import { hasStoreLiveKey, validateStoreMandate, STORE_PAYEE } from "./store-live.server";
 import { POST, maxDuration } from "../../app/api/store/pay/route";
 import { GET } from "../../app/api/store/latte/route";
@@ -23,16 +23,26 @@ vi.mock("@x402/next", async () => {
 });
 const env = { NODE_ENV: "test" as const, STORE_LIVE_KEY: "live-test-placeholder-01234567890123456789",
   ORCHESTRATOR_WALLET_MNEMONIC: "mnemonic-test-placeholder", BLOCKFROST_API_KEY_PREPROD: "provider-test-placeholder",
-  SOKOSUMI_API_URL: "https://api.preprod.sokosumi.com", SOKOSUMI_COWORKER_API_KEY: "core-test-placeholder" };
+  SOKOSUMI_API_URL: "https://api.preprod.sokosumi.com", SOKOSUMI_COWORKER_API_KEY: "core-test-placeholder",
+  STORE_PAY_DATABASE_URL: "postgres://store_pay:database-test-placeholder@invalid/store" };
 const key = PrivateKey.fromHex("03".repeat(32));
 const guardAddress = Address.toBech32(Address.fromHex(`60${KeyHash.toHex(KeyHash.fromPrivateKey(key))}`));
 const options = { ...env, GUARD_ADDRESS: guardAddress };
 const taskId = "store-task";
 const endpoint = "https://store.test/api/store/latte";
-const journals: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); await Promise.all(journals.splice(0).map(async (path) => {
-  try { await unlink(path); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-})); });
+let database: PGlite;
+let db: Db;
+beforeAll(async () => {
+  database = new PGlite();
+  db = { query: (text, params) => database.query(text, params) };
+  // Test fixture only. Production must use orch's existing table and restricted role.
+  await db.query(`CREATE TABLE store_payments (task_id text PRIMARY KEY, event_id text NOT NULL,
+    state text NOT NULL CHECK (state IN ('signing','prepared','done')), proposal_digest text NOT NULL,
+    headers jsonb, tx_hash text, payment jsonb, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`);
+}, 20_000);
+beforeEach(async () => { await db.query("TRUNCATE store_payments"); });
+afterAll(async () => { await database?.close(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 const bundle = () => createDevMandate({ payee: STORE_PAYEE, amount: "6500000" });
 const proposal: SpendProposal = { kind: "x402", requirements: { scheme: "exact", network: "cardano:preprod", asset: "lovelace",
   amount: "6500000", payTo: STORE_PAYEE, maxTimeoutSeconds: 600, extra: { confirmationPolicy: { l1Confirmations: 0 } } } };
@@ -58,8 +68,6 @@ function coreFetch(b: MandateBundle, settings: { verdict?: "APPROVE" | "REFUSE";
   });
 }
 async function payer(settings: { ttl?: bigint; changed?: boolean; chain?: boolean } = {}) {
-  await mkdir(join(process.cwd(), "runs"), { recursive: true });
-  const journalPath = join(process.cwd(), "runs", `t022-${randomUUID()}.json`); journals.push(journalPath);
   const body = new Map<CBOR.CBOR, CBOR.CBOR>([[0n, []], [1n, []], [2n, 170000n],
     [3n, settings.ttl ?? Time.unixTimeToSlot(BigInt(Date.now() + 600_000), SlotConfig.getSlotConfig("Preprod"))]]);
   const bytes = CBOR.toCBORBytes([body, new Map(), true, null]);
@@ -74,11 +82,15 @@ async function payer(settings: { ttl?: bigint; changed?: boolean; chain?: boolea
     if (!signature) return new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": Buffer.from(JSON.stringify(settings.changed
       ? { ...required, accepts: [{ ...proposal.requirements, amount: "28000000" }] } : required)).toString("base64") } });
     sent.push(signature);
+    const saved = (await db.query("SELECT state, headers, tx_hash FROM store_payments WHERE task_id=$1", [taskId])).rows[0];
+    expect(saved).toEqual({ state: "prepared", headers, tx_hash: txHash });
     return settings.chain ? new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": Buffer.from(JSON.stringify({ ...required, error: "nonce_not_on_chain" })).toString("base64") } })
       : new Response("{}", { headers: { "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({ success: true, network: "cardano:preprod", transaction: txHash })).toString("base64") } });
   });
-  const pay = createPaymentRunner({ journalPath, deps: { fetch: paymentFetch, createHeaders: sign, sleep: async () => {}, lookupTransaction: async () => true, log: () => {} } });
-  return { pay, sign, sent, journalPath, txHash };
+  const deps: PaymentDeps = { fetch: paymentFetch, createHeaders: sign, sleep: async () => {}, lookupTransaction: async () => true, log: () => {} };
+  const runner = (runnerDb: Db = { query: (text, params) => db.query(text, params) }, overrides: Partial<PaymentDeps> = {}) =>
+    createStorePaymentRunner({ db: runnerDb, deps: { ...deps, ...overrides } });
+  return { pay: runner(), runner, sign, sent, txHash, headers, paymentFetch };
 }
 
 it("unpaid latte GET returns the exact x402 requirements without network", async () => {
@@ -121,9 +133,8 @@ it("verified APPROVE pays once and a second call returns the saved result withou
     expect(response.status).toBe(200); expect(await response.json()).toEqual({ txHash: paid.txHash, status: "confirmed" });
   }
   expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
-  const journal = JSON.parse(await readFile(paid.journalPath, "utf8"));
-  expect(journal.actions[JSON.stringify([taskId, "event-complete", "pay"])]).toMatchObject({ state: "done", payment: { txHash: paid.txHash } });
-  expect(STORE_JOURNAL_PATH).toBe("/tmp/agentpay-store-journal.json"); expect(maxDuration).toBe(300);
+  expect((await db.query("SELECT * FROM store_payments")).rows).toMatchObject([{ task_id: taskId, event_id: "event-complete", state: "done", payment: { txHash: paid.txHash } }]);
+  expect(maxDuration).toBe(300);
 });
 it("later completion event cannot create a second payment for the same Task", async () => {
   const b = bundle(); const paid = await payer();
@@ -133,8 +144,16 @@ it("later completion event cannot create a second payment for the same Task", as
 });
 it("overlapping payment requests cannot acquire a second signature", async () => {
   const b = bundle(); const paid = await payer();
-  const responses = await Promise.all([0, 1].map(() => handleStorePay(request(), { env: options, fetch: coreFetch(b), pay: paid.pay })));
-  expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+  let release!: () => void; let entered!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  const first = handleStorePay(request(), { env: options, fetch: coreFetch(b),
+    pay: paid.runner(undefined, { createHeaders: async () => { entered(); await gate; return paid.sign(); } }) });
+  await started;
+  const second = await handleStorePay(request(), { env: options, fetch: coreFetch(b), pay: paid.runner() });
+  release();
+  expect(second.status).toBe(409); expect(await second.json()).toEqual({ error: "Payment signing is interrupted or in progress. No second transaction will be signed; inspect the durable store payment." });
+  expect((await first).status).toBe(200);
   expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
   expect((await handleStorePay(request(), { env: options, fetch: coreFetch(b), pay: paid.pay })).status).toBe(200);
 });
@@ -182,6 +201,227 @@ it("redacts provider errors and disables payment when wallet configuration is mi
 });
 it("the real POST route denies missing live key without configuration or network", async () => {
   vi.stubEnv("STORE_LIVE_KEY", ""); expect((await POST(request({}, null))).status).toBe(403);
+});
+it("missing durable database configuration disables live payment with no fallback", async () => {
+  const fetcher = vi.fn<typeof fetch>(); const pay = vi.fn();
+  const response = await handleStorePay(request(), { env: { ...options, STORE_PAY_DATABASE_URL: "" }, fetch: fetcher, pay });
+  expect(response.status).toBe(403); expect(fetcher).not.toHaveBeenCalled(); expect(pay).not.toHaveBeenCalled();
+});
+it("the exported POST denies missing STORE_PAY_DATABASE_URL before Core or wallet I/O", async () => {
+  for (const [name, value] of Object.entries(options)) vi.stubEnv(name, value);
+  vi.stubEnv("STORE_PAY_DATABASE_URL", "");
+  const fetcher = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no I/O permitted"));
+  expect((await POST(request())).status).toBe(403); expect(fetcher).not.toHaveBeenCalled();
+});
+it("independent runners return the durable saved result without a new signature, even with another event ID", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  const id = { taskId, eventId: "original-event", action: "pay" as const };
+  expect(await paid.pay(proposal, endpoint, id, expiry)).toMatchObject({ txHash: paid.txHash });
+  expect(await paid.runner()(proposal, endpoint, { ...id, eventId: "later-event" }, expiry)).toMatchObject({ txHash: paid.txHash });
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
+  expect((await db.query("SELECT event_id FROM store_payments")).rows).toEqual([{ event_id: "original-event" }]);
+});
+it("a restarted runner fails closed after interrupted signing and never signs again", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  const id = { taskId, eventId: "original-event", action: "pay" as const };
+  paid.sign.mockRejectedValueOnce(new Error("mnemonic-test-placeholder provider-test-placeholder"));
+  await expect(paid.pay(proposal, endpoint, id, expiry)).rejects.toThrow();
+  expect((await db.query("SELECT state, headers FROM store_payments")).rows).toEqual([{ state: "signing", headers: null }]);
+  await expect(paid.runner()(proposal, endpoint, id, expiry)).rejects.toThrow("No second transaction will be signed");
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(0);
+});
+it("durable prepared bytes survive a database restart and recover on chain without signing", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  const id = { taskId, eventId: "original-event", action: "pay" as const };
+  const interrupted = paid.runner(undefined, { fetch: async (url, init) => {
+    if (!init?.headers) return new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": Buffer.from(JSON.stringify({ x402Version: 2, accepts: [proposal.requirements] })).toString("base64") } });
+    throw new Error(`interrupted at ${url}`);
+  }, sleep: async () => { throw new Error("simulate process exit"); } });
+  await expect(interrupted(proposal, endpoint, id, expiry)).rejects.toThrow();
+  expect((await db.query("SELECT state, headers, tx_hash FROM store_payments")).rows).toEqual([{ state: "prepared", headers: paid.headers, tx_hash: paid.txHash }]);
+  const snapshot = await database.dumpDataDir();
+  const restarted = new PGlite({ loadDataDir: snapshot });
+  try {
+    const newDb: Db = { query: (text, params) => restarted.query(text, params) };
+    const fetchPaid = vi.fn(); const lookupTransaction = vi.fn(async () => true);
+    expect(await paid.runner(newDb, { fetch: fetchPaid, lookupTransaction })(proposal, endpoint, id, expiry))
+      .toEqual({ txHash: paid.txHash, network: "cardano:preprod", status: "confirmed-on-chain" });
+    expect(fetchPaid).not.toHaveBeenCalled(); expect(lookupTransaction).toHaveBeenCalledWith(paid.txHash);
+    expect((await newDb.query("SELECT state, headers FROM store_payments")).rows).toEqual([{ state: "done", headers: paid.headers }]);
+    expect(paid.sign).toHaveBeenCalledTimes(1);
+  } finally { await restarted.close(); }
+}, 20_000);
+it("transport retries send only the durable original bytes and obtain at most one signature", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  const bytes: string[] = []; let first = true;
+  const retry = paid.runner(undefined, { fetch: async (_url, init) => {
+    if (!init?.headers) return new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": Buffer.from(JSON.stringify({ x402Version: 2, accepts: [proposal.requirements] })).toString("base64") } });
+    bytes.push(new Headers(init.headers).get("PAYMENT-SIGNATURE")!);
+    expect((await db.query("SELECT state, headers FROM store_payments")).rows).toEqual([{ state: "prepared", headers: paid.headers }]);
+    if (first) { first = false; throw new Error("lost transport"); }
+    return new Response("{}", { headers: { "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({ success: true, network: "cardano:preprod", transaction: paid.txHash })).toString("base64") } });
+  } });
+  expect(await retry(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, expiry)).toMatchObject({ txHash: paid.txHash });
+  expect(bytes).toEqual([paid.headers["PAYMENT-SIGNATURE"], paid.headers["PAYMENT-SIGNATURE"]]); expect(paid.sign).toHaveBeenCalledTimes(1);
+});
+it.each(["signing", "prepared", "done"])("proposal mismatch against durable %s refuses before signing or sending", async (state) => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  await db.query("INSERT INTO store_payments(task_id,event_id,state,proposal_digest,headers,tx_hash,payment) VALUES($1,'event',$2,$3,$4,$5,$6)",
+    [taskId, state, "ab".repeat(32), paid.headers, paid.txHash, { txHash: paid.txHash, network: "cardano:preprod", status: "confirmed" }]);
+  await expect(paid.pay(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, expiry)).rejects.toThrow("proposal");
+  expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+});
+it("a failed durable prepare save blocks sending and never permits a second signature", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  const faulty: Db = { query: (text, params) => {
+    if (text.includes("UPDATE") && text.includes("prepared")) throw new Error(env.STORE_PAY_DATABASE_URL);
+    return db.query(text, params);
+  } };
+  const id = { taskId, eventId: "event", action: "pay" as const };
+  await expect(paid.runner(faulty)(proposal, endpoint, id, expiry)).rejects.toThrow();
+  expect(paid.sent).toHaveLength(0); expect(paid.sign).toHaveBeenCalledTimes(1);
+  await expect(paid.runner()(proposal, endpoint, id, expiry)).rejects.toThrow("No second transaction will be signed");
+  expect(paid.sign).toHaveBeenCalledTimes(1);
+});
+it("a restart before the first broadcast sends only the durable prepared bytes", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  await db.query("INSERT INTO store_payments(task_id,event_id,state,proposal_digest,headers,tx_hash) VALUES($1,'first-event','prepared',$2,$3,$4)",
+    [taskId, proposalDigest(proposal), paid.headers, paid.txHash]);
+  const runner = paid.runner(undefined, { lookupTransaction: async () => false, sleep: async () => { throw new Error("no broadcast to confirm"); } });
+  await expect(runner(proposal, endpoint, { taskId, eventId: "second-event", action: "pay" }, expiry)).resolves.toMatchObject({ txHash: paid.txHash });
+  expect(paid.sent).toEqual([paid.headers["PAYMENT-SIGNATURE"]]); expect(paid.sign).not.toHaveBeenCalled();
+});
+it("a saved payment remains recoverable after Mandate expiry without signing again", async () => {
+  const b = bundle(); const paid = await payer();
+  expect((await handleStorePay(request(), { env: options, fetch: coreFetch(b), pay: paid.pay })).status).toBe(200);
+  vi.spyOn(Date, "now").mockReturnValue((b.mandate.expiry + 1) * 1000);
+  const response = await handleStorePay(request(), { env: options, fetch: coreFetch(b), pay: paid.runner() });
+  expect(response.status).toBe(200); expect(await response.json()).toEqual({ txHash: paid.txHash, status: "confirmed" });
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
+});
+it("a lost done update recovers the original prepared transaction without signing again", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  const faulty: Db = { query: (text, params) => {
+    if (text.includes("UPDATE") && text.includes("state='done'")) throw new Error("lost done write");
+    return db.query(text, params);
+  } };
+  const id = { taskId, eventId: "event", action: "pay" as const };
+  await expect(paid.runner(faulty)(proposal, endpoint, id, expiry)).rejects.toThrow();
+  expect((await db.query("SELECT state FROM store_payments")).rows).toEqual([{ state: "prepared" }]);
+  expect(await paid.runner()(proposal, endpoint, id, expiry)).toMatchObject({ txHash: paid.txHash, status: "confirmed-on-chain" });
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
+});
+it("the restricted Postgres role can pay without DDL or other table permissions", async () => {
+  await db.query("CREATE ROLE store_pay_test");
+  await db.query("GRANT SELECT,INSERT,UPDATE ON store_payments TO store_pay_test");
+  await db.query("SET ROLE store_pay_test");
+  try {
+    const paid = await payer();
+    expect(await paid.pay(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, bundle().mandate.expiry)).toMatchObject({ txHash: paid.txHash });
+  } finally { await db.query("RESET ROLE"); }
+});
+it("a lost INSERT acknowledgement leaves a durable signing claim and never allows signing on retry", async () => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry;
+  const faulty: Db = { async query<T>(text: string, params?: unknown[]) {
+    const result = await db.query<T>(text, params);
+    if (text.includes("INSERT")) throw new Error(env.STORE_PAY_DATABASE_URL);
+    return result;
+  } };
+  const id = { taskId, eventId: "event", action: "pay" as const };
+  const response = await handleStorePay(request(), { env: options, fetch: coreFetch(bundle()), pay: paid.runner(faulty) });
+  expect(response.status).toBe(409); expect(await response.text()).not.toContain(env.STORE_PAY_DATABASE_URL);
+  expect((await db.query("SELECT state FROM store_payments")).rows).toEqual([{ state: "signing" }]);
+  await expect(paid.runner()(proposal, endpoint, id, expiry)).rejects.toThrow("No second transaction will be signed");
+  expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+});
+it("a durable prepared hash that differs from the original signed bytes refuses without signing or sending", async () => {
+  const paid = await payer();
+  await db.query("INSERT INTO store_payments(task_id,event_id,state,proposal_digest,headers,tx_hash) VALUES($1,'event','prepared',$2,$3,$4)",
+    [taskId, proposalDigest(proposal), paid.headers, "ab".repeat(32)]);
+  await expect(paid.runner()(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, bundle().mandate.expiry)).rejects.toThrow("hash mismatch");
+  expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+});
+it.each(["transport", "http-503", "changed-402", "expiry"])("read-only %s failure leaves no durable claim and no signature", async (failure) => {
+  const paid = await payer(); const id = { taskId, eventId: "event", action: "pay" as const };
+  const expiry = failure === "expiry" ? Math.floor(Date.now() / 1000) + 599 : bundle().mandate.expiry;
+  const fetcher = vi.fn<PaymentDeps["fetch"]>(async () => {
+    expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]);
+    if (failure === "transport") throw new Error("transient seller GET failure");
+    if (failure === "http-503") return new Response("unavailable", { status: 503 });
+    return new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": Buffer.from(JSON.stringify({ x402Version: 2,
+      accepts: [{ ...proposal.requirements, amount: "28000000" }] })).toString("base64") } });
+  });
+  await expect(paid.runner(undefined, { fetch: fetcher })(proposal, endpoint, id, expiry)).rejects.toThrow();
+  expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]);
+  expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
+  if (failure === "expiry") expect(fetcher).not.toHaveBeenCalled();
+  expect(await paid.runner()(proposal, endpoint, id, bundle().mandate.expiry)).toMatchObject({ txHash: paid.txHash });
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
+});
+it("two instances retrying a transient fresh GET failure both check before the claim, then obtain only one signature", async () => {
+  const paid = await payer(); const id = { taskId, eventId: "event", action: "pay" as const }; const expiry = bundle().mandate.expiry;
+  await expect(paid.runner(undefined, { fetch: async () => { throw new Error("transient GET failure"); } })(proposal, endpoint, id, expiry)).rejects.toThrow();
+  expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]); expect(paid.sign).not.toHaveBeenCalled();
+  let releaseFresh!: () => void; let bothFresh!: () => void; let freshCalls = 0;
+  const freshGate = new Promise<void>((resolve) => { releaseFresh = resolve; });
+  const freshStarted = new Promise<void>((resolve) => { bothFresh = resolve; });
+  let releaseSign!: () => void; let enteredSign!: () => void;
+  const signGate = new Promise<void>((resolve) => { releaseSign = resolve; });
+  const signStarted = new Promise<void>((resolve) => { enteredSign = resolve; });
+  const overrides: Partial<PaymentDeps> = {
+    fetch: async (url, init) => {
+      if (!init?.headers) {
+        expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]);
+        if (++freshCalls === 2) bothFresh();
+        await freshGate;
+      }
+      return paid.paymentFetch(url, init);
+    },
+    createHeaders: async () => { enteredSign(); await signGate; return paid.sign(); },
+  };
+  const attempts = [paid.runner(undefined, overrides), paid.runner(undefined, overrides)].map((run) =>
+    run(proposal, endpoint, id, expiry).then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error })));
+  try {
+    await freshStarted; releaseFresh(); await signStarted;
+    const loser = await Promise.race(attempts);
+    expect(loser.ok).toBe(false);
+    if (!loser.ok) expect(loser.error).toHaveProperty("message", "Payment signing is interrupted or in progress. No second transaction will be signed; inspect the durable store payment.");
+  } finally { releaseFresh(); releaseSign(); }
+  const results = await Promise.all(attempts);
+  expect(results.filter((result) => result.ok)).toHaveLength(1); expect(freshCalls).toBe(2);
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toEqual([paid.headers["PAYMENT-SIGNATURE"]]);
+  expect(await paid.runner()(proposal, endpoint, id, expiry)).toMatchObject({ txHash: paid.txHash });
+  expect(paid.sign).toHaveBeenCalledTimes(1);
+});
+it.each(["done", "prepared"])("a losing claim recovers a competing instance's %s state without signing", async (state) => {
+  const paid = await payer(); const expiry = bundle().mandate.expiry; const id = { taskId, eventId: "original-event", action: "pay" as const };
+  const competingDb: Db = { query: (text, params) => {
+    if (state === "prepared" && text.includes("UPDATE") && text.includes("state='done'")) throw new Error("lost done update");
+    return db.query(text, params);
+  } };
+  const runner = paid.runner(undefined, { fetch: async (url, init) => {
+    if (!init?.headers) {
+      // This runner has already read no row. The competitor now signs once.
+      const competing = paid.runner(competingDb)(proposal, endpoint, id, expiry);
+      if (state === "prepared") await expect(competing).rejects.toThrow("database operation failed");
+      else expect(await competing).toMatchObject({ txHash: paid.txHash });
+    }
+    return paid.paymentFetch(url, init);
+  } });
+  expect(await runner(proposal, endpoint, { ...id, eventId: "late-event" }, expiry)).toEqual({ txHash: paid.txHash,
+    network: "cardano:preprod", status: state === "done" ? "confirmed" : "confirmed-on-chain" });
+  expect(paid.sign).toHaveBeenCalledTimes(1); expect(paid.sent).toHaveLength(1);
+  expect((await db.query("SELECT event_id,state FROM store_payments")).rows).toEqual([{ event_id: "original-event", state: "done" }]);
+});
+it("a slow fresh GET that consumes the remaining expiry allowance leaves no signing claim", async () => {
+  const clock = Date.now(); vi.spyOn(Date, "now").mockReturnValue(clock);
+  const paid = await payer(); const expiry = Math.floor(clock / 1000) + 610;
+  const runner = paid.runner(undefined, { fetch: async (url, init) => {
+    vi.mocked(Date.now).mockReturnValue(clock + 20_000);
+    return paid.paymentFetch(url, init);
+  } });
+  await expect(runner(proposal, endpoint, { taskId, eventId: "event", action: "pay" }, expiry)).rejects.toThrow("Mandate expires");
+  expect((await db.query("SELECT * FROM store_payments")).rows).toEqual([]); expect(paid.sign).not.toHaveBeenCalled(); expect(paid.sent).toHaveLength(0);
 });
 it("validates a live Mandate cryptographically and rejects wrong signed payee/amount, asset, expiry and signature", () => {
   const b = bundle(); expect(validateStoreMandate(b)).toEqual(b);

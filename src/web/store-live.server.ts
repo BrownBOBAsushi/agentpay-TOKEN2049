@@ -16,13 +16,13 @@ export function hasStoreLiveKey(request: Request, env: Record<string, string | u
 }
 
 // The live hire path calls this before it can submit any Task.
-export function validateStoreMandate(input: unknown, nowSec = Math.floor(Date.now() / 1000)): MandateBundle {
+export function validateStoreMandate(input: unknown, options: { nowSec?: number; allowExpired?: boolean } = {}): MandateBundle {
   const parsed = MandateBundleSchema.safeParse(input);
   if (!parsed.success || !verifyMandate(parsed.data).ok) throw new Error("Signed Mandate verification failed.");
   const bundle = parsed.data;
   if (bundle.mandate.payee !== STORE_PAYEE || bundle.mandate.asset !== "lovelace" || bundle.mandate.amount !== STORE_AMOUNT) {
     throw new Error("Mandate must allow 6500000 lovelace to The Corner Store.");
   }
-  if (bundle.mandate.expiry <= nowSec) throw new Error("Mandate has expired.");
+  if (!options.allowExpired && bundle.mandate.expiry <= (options.nowSec ?? Math.floor(Date.now() / 1000))) throw new Error("Mandate has expired.");
   return bundle;
 }
