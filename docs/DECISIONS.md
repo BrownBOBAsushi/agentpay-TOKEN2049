@@ -182,3 +182,17 @@
   (403 for agent keys), so the public link is our `/receipt/<taskId>`. Hires are rate-limited.
 - **Why:** The user asked for one continuous flow with no terminal; DEC-T16's local check stays the fallback.
 - **Status:** Accepted.
+
+## DEC-T18 — Live Cardano x402 payment on `/store` (private demo link)
+- **Date:** 2026-10-07
+- **Decision:** `/store` gets a **live mode** opened by a secret link (`/store?live=<STORE_LIVE_KEY>`). In live
+  mode, when the Guard on Sokosumi returns a verified APPROVE, the Vercel server pays **6.5 tADA to The
+  Corner Store over x402 on Cardano preprod** (hosted facilitator) from the Orchestrator wallet and shows
+  the tx hash + Cardanoscan link. The latte is a real x402-paid route on Vercel (`@x402/next` pinned 2.26.0).
+  Live mode also hires the Guard for APPROVE (consumes the Mandate nonce), and accepts an uploaded,
+  freshly signed Mandate bundle so each take can use a new Mandate without a redeploy. Public mode is
+  unchanged (no payment). Payment reuses the T-017/T-019 payment code (TTL ≤ Mandate expiry, same signed
+  bytes on retry, chain confirmation); idempotency `{taskId, eventId, "pay"}` plus the one-time Mandate nonce.
+- **Why:** The user wants one unbroken real flow on camera, on the Cardano track (Solana rejected: off-track,
+  touches guard-core). Gating protects the preprod wallet from strangers.
+- **Status:** Accepted.
