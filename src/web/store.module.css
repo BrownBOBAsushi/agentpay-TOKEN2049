@@ -40,7 +40,11 @@
 .bankHeading h2 { font-size: clamp(32px, 3.4vw, 48px); margin-top: 16px; color: #e6ede7; scroll-margin-top: 24px; }
 .bankHeading > p { font: 400 30px/1.2 var(--font-legends), serif; color: #e6ede7; }
 .honestNote { color: #c3d1c9; max-width: 75ch; margin-bottom: 42px; }
-.agentLog { padding-left: 24px; margin: 0; }
+.bank .slipDiff > div { display: block; min-width: 0; }
+.merchantName { display: block; margin: 4px 0; }
+.slipValue { display: block; min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; font-family: var(--font-values), monospace; }
+.bank .storeLedger { background: #f3f4ef; }
+.agentLog { padding-left: 24px; margin: 0; line-height: 1.6; }
 .agentLog li { padding: 10px 0; border-bottom: 1px solid #9db7c2; overflow-wrap: anywhere; }
 @media (max-width: 639px) {
   .shopInner { padding: 28px 20px 40px; }

@@ -1,5 +1,6 @@
 import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProductDescription, StoreClient, StoreVerdict } from "./StoreClient";
 import { checkStoreFromBrowser, focusStoreVerdict, hiddenStoreComment, presentStoreResult } from "./store-browser";
@@ -9,6 +10,8 @@ import { POST } from "../../app/api/store/check/route";
 import { MandateBundleSchema } from "../guard";
 import { proposalDigest } from "../guard/receipt";
 import fixture from "./fixtures/store-mandate.json";
+import styles from "./store.module.css";
+import receipt from "./receipt.module.css";
 const bundle = MandateBundleSchema.parse(fixture);
 const stripComments = (html: string) => html.replace(/<!--[\s\S]*?-->/g, "");
 afterEach(() => vi.restoreAllMocks());
@@ -54,6 +57,39 @@ it("renders APPROVE as CLEARED with both recorded proof links and the full-flow 
   expect(html).toContain("In the full flow the agent now pays over x402");
   expect(html).toContain(`href="${STORE_RECEIPT}"`); expect(html).toContain(`href="${STORE_TRANSACTION}"`);
   expect(html).toContain("real wallet signature"); expect(html).toContain('<ol');
+});
+it("keeps full Signed and Presented payees in the slip, each below its merchant name", async () => {
+  const data = await result(STORE_INJECTION);
+  const html = renderToStaticMarkup(h(StoreVerdict, { bundle, result: data, testKey: true }));
+  const slip = html.match(/<aside\b[^>]*aria-label="Store Guard Check slip"[\s\S]*?<\/aside>/)?.[0];
+  expect(slip).toBeDefined();
+  for (const [label, name, address] of [["Signed", "The Corner Store", bundle.mandate.payee],
+    ["Presented", "Evil Store", data.proposal.requirements.payTo]]) {
+    expect(slip).toContain(`<span>${label}</span><span class="${styles.merchantName}">${name}</span>`);
+    expect(slip).toMatch(new RegExp(`<span class="value ${receipt.identifier} ${styles.slipValue}">${address}</span>`));
+  }
+});
+it("allows slip addresses to shrink and wrap at any character without truncation", () => {
+  const css = readFileSync(new URL("./store.module.css", import.meta.url), "utf8");
+  const row = css.match(/\.slipDiff > div\s*\{([^}]+)\}/)?.[1] ?? "";
+  expect(row).toMatch(/display:\s*block/); expect(row).toMatch(/min-width:\s*0/);
+  const value = css.match(/\.slipValue\s*\{([^}]+)\}/)?.[1] ?? "";
+  for (const contract of [/display:\s*block/, /min-width:\s*0/, /max-width:\s*100%/,
+    /overflow-wrap:\s*anywhere/, /white-space:\s*normal/, /font-family:\s*var\(--font-values\)/]) expect(value).toMatch(contract);
+  expect(value).not.toMatch(/overflow:\s*(?:hidden|clip)|text-overflow:\s*ellipsis/);
+  expect(css.match(/\.merchantName\s*\{([^}]+)\}/)?.[1]).toMatch(/display:\s*block/);
+  const sharedCss = readFileSync(new URL("./receipt.module.css", import.meta.url), "utf8");
+  // The shared identifier class exempts these values from the non-identifier wrapping reset.
+  expect(sharedCss.match(/^\.identifier\s*\{([^}]+)\}/m)?.[1]).toMatch(/overflow-wrap:\s*anywhere\s*!important/);
+});
+it("uses a store-only plain ledger surface and rules below variable-height log items", async () => {
+  const html = renderToStaticMarkup(h(StoreVerdict, { bundle, result: await result(STORE_INJECTION), testKey: true }));
+  expect(new RegExp(`<section class="[^"]*${styles.storeLedger}[^"]*" aria-labelledby="store-log-title"`).test(html)).toBe(true);
+  const css = readFileSync(new URL("./store.module.css", import.meta.url), "utf8");
+  const ledger = css.match(/\.bank \.storeLedger\s*\{([^}]+)\}/)?.[1] ?? "";
+  expect(ledger).toMatch(/background:\s*#f3f4ef\s*;/); expect(ledger).not.toContain("gradient");
+  expect(css.match(/\.agentLog\s*\{([^}]+)\}/)?.[1]).toMatch(/line-height:\s*1\.6/);
+  expect(css.match(/\.agentLog li\s*\{([^}]+)\}/)?.[1]).toMatch(/border-bottom:\s*1px solid/);
 });
 it("changes the presented safety pattern when the checkout changes", async () => {
   expect((await result(STORE_INJECTION)).proposalDigest).not.toBe((await result(null)).proposalDigest);

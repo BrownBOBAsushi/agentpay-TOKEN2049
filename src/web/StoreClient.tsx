@@ -55,10 +55,12 @@ export function StoreVerdict({ bundle, result, testKey, headingRef }: {
       </section>
       <ReturnItem reasons={result.reasons} className={receipt.slip} label="Store Guard Check slip" title={returned ? "RETURN ITEM · AgentPay Guard" : "CLEARED · AgentPay Guard"}>
         <h2>{returned ? "Field Diff" : "Exact match"}</h2>
-        {result.diff.map((row, index) => <section className={receipt.diff} key={`${row.field}-${index}`}>
+        {result.diff.map((row, index) => <section className={`${receipt.diff} ${styles.slipDiff}`} key={`${row.field}-${index}`}>
           <h3>{row.field}</h3>
-          <div><span>Signed</span><span className="value">{row.field === "amount" ? `${atomicToDecimal(row.signed)} tADA` : row.signed}</span></div>
-          <div><span>Presented</span><span className="value">{row.field === "amount" ? `${atomicToDecimal(row.proposed)} tADA` : row.proposed}</span></div>
+          <div><span>Signed</span>{row.field === "payee" && <span className={styles.merchantName}>The Corner Store</span>}
+            <span className={`value ${receipt.identifier} ${styles.slipValue}`}>{row.field === "amount" ? `${atomicToDecimal(row.signed)} tADA` : row.signed}</span></div>
+          <div><span>Presented</span>{row.field === "payee" && <span className={styles.merchantName}>{merchant}</span>}
+            <span className={`value ${receipt.identifier} ${styles.slipValue}`}>{row.field === "amount" ? `${atomicToDecimal(row.proposed)} tADA` : row.proposed}</span></div>
         </section>)}
         {returned ? <><ul className={receipt.reasonCodes}>{result.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul><p>No payment made.</p></>
           : <><p>In the full flow the agent now pays over x402</p><div className={receipt.slipSettlement}>
@@ -66,7 +68,7 @@ export function StoreVerdict({ bundle, result, testKey, headingRef }: {
           </div></>}
       </ReturnItem>
     </div>
-    <section className={receipt.ledger} aria-labelledby="store-log-title"><h2 id="store-log-title">Agent log</h2>
+    <section className={`${receipt.ledger} ${styles.storeLedger}`} aria-labelledby="store-log-title"><h2 id="store-log-title">Agent log</h2>
       <ol className={`value ${styles.agentLog}`}>{result.steps.map((step, index) => <li key={index}>{step}</li>)}</ol>
     </section>
   </section>;
