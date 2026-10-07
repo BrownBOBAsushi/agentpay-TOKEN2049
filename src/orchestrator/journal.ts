@@ -33,6 +33,14 @@ export class Journal {
     const data = await this.read(); data.hires[requestKey] = taskId ? { taskId } : {}; await this.save(data);
   }
   async get(id: ActionId) { return (await this.read()).actions[actionKey(id)]; }
+  async getPaymentId(taskId: string): Promise<ActionId | undefined> {
+    const keys = Object.keys((await this.read()).actions).map((key) => {
+      try { return z.tuple([z.string(), z.string(), z.enum(["hire", "pay"])]).parse(JSON.parse(key)); }
+      catch { throw new StopError("journal action key invalid; no payment"); }
+    }).filter(([task, , action]) => task === taskId && action === "pay");
+    if (keys.length > 1) throw new StopError("Task has multiple saved payments; stop for inspection");
+    return keys[0] ? { taskId, eventId: keys[0][1], action: "pay" } : undefined;
+  }
   async set(id: ActionId, action: Action) {
     const data = await this.read(); data.actions[actionKey(id)] = action; await this.save(data);
   }
