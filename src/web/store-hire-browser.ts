@@ -30,8 +30,9 @@ export async function hireStoreFromBrowser(injection: string | null, options: { 
     if (remaining <= 0) break;
     try {
       const response = await fetcher(`/api/store/hire/${encodeURIComponent(hired.taskId)}`, {
-        method: "GET", cache: "no-store", signal: AbortSignal.timeout(Math.min(10_000, remaining)) });
-      if (response.status === 404) return fallback("Guard Task is unavailable on this instance — showing the local check");
+        method: "GET", cache: "no-store", headers: { "X-Store-Task-Token": hired.taskToken,
+          "X-Store-Proposal-Digest": local.proposalDigest }, signal: AbortSignal.timeout(Math.min(10_000, remaining)) });
+      if ([401, 403, 404].includes(response.status)) return fallback("Guard Task authorization is unavailable or expired — showing the local check");
       if (!response.ok) continue;
       const status = StoreHireStatusSchema.parse(await response.json());
       if (now() >= deadline) break;

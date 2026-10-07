@@ -7,7 +7,7 @@ export function runStoreCheck(injection: string | null, bundle: MandateBundle, n
   const agent = runStoreAgent(injection, bundle.mandate.payee);
   const result = guardCheck({ bundle, proposal: agent.proposal }, { nowSec, nonceUsed: false });
   const { payee, amount, asset, expiry, purpose, payer } = bundle.mandate;
-  return StoreResultSchema.parse({ ...agent, steps: [...agent.steps, `Real Guard Check: ${result.verdict}`], ...result,
+  return StoreResultSchema.parse({ ...agent, steps: [...agent.steps, `Instant pre-check (same Guard code): ${result.verdict}`], ...result,
     mandate: { payee, amount, asset, expiry, purpose, payer } });
 }
 

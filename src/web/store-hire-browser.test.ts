@@ -12,7 +12,7 @@ import fixture from "./fixtures/store-mandate.json";
 const bundle = MandateBundleSchema.parse(fixture);
 const local = runStoreCheck(STORE_INJECTION, bundle, bundle.mandate.expiry - 3600);
 const taskId = "browser-store-task";
-const hired = { mode: "hired", taskId, local, proposal: local.proposal,
+const hired = { mode: "hired", taskId, taskToken: "test-public-authorization-token", local, proposal: local.proposal,
   steps: [...local.steps, `Guard hired on Sokosumi — Task ${taskId}`] };
 function clock() {
   let time = 0; const wait = vi.fn(async (ms: number) => { time += ms; });
@@ -26,7 +26,8 @@ it("polls every 2 seconds, shows the three log lines, then the signed verdict an
         "X-Store-Request-Id": expect.stringMatching(/^[0-9a-f-]{36}$/) }, body: JSON.stringify({ injection: STORE_INJECTION }) });
       return Response.json(hired);
     }
-    expect(url).toBe(`/api/store/hire/${taskId}`); expect(init).toMatchObject({ method: "GET", cache: "no-store" });
+    expect(url).toBe(`/api/store/hire/${taskId}`); expect(init).toMatchObject({ method: "GET", cache: "no-store",
+      headers: { "X-Store-Task-Token": hired.taskToken, "X-Store-Proposal-Digest": presentation.proposalDigest } });
     return timer.now() === 2000 ? Response.json({ status: "pending" }) : Response.json({ status: "completed",
       receiptValid: true, verdict: "REFUSE", reasons: ["AMOUNT_MISMATCH"], diff: local.diff,
       mandateDigest: bundle.digest, proposalDigest: presentation.proposalDigest });
@@ -43,6 +44,7 @@ it("polls every 2 seconds, shows the three log lines, then the signed verdict an
   expect(html).toContain(`href="https://preprod.sokosumi.com/tasks/${taskId}"`);
   expect(html).toContain("your Sokosumi workspace (sign-in)"); expect(html).toContain("Signed Receipt (public)");
   expect(html).toContain(`href="/receipt/${taskId}"`); expect(html).toContain("No money moves here.");
+  expect(html).not.toContain(hired.taskToken); expect(JSON.stringify(result)).not.toContain(hired.taskToken);
 });
 it("returns local APPROVE with the one-time Mandate note and never polls", async () => {
   const approved = runStoreCheck(null, bundle, bundle.mandate.expiry - 3600);
@@ -85,11 +87,12 @@ it("bounds a slow final read and never polls after the deadline", async () => {
   const result = await hireStoreFromBrowser(STORE_INJECTION, { fetch: fetcher, ...timer });
   expect(result).toMatchObject({ receiptValid: false, verdict: "REFUSE" }); expect(fetcher).toHaveBeenCalledTimes(2);
 });
-it.each(["failed", "unknown", "wrong-digest", "unverified"])("falls back honestly for %s", async (state) => {
+it.each(["failed", "unknown", "forbidden", "wrong-digest", "unverified"])("falls back honestly for %s", async (state) => {
   const timer = clock(); const presentation = await presentStoreResult(local);
   const fetcher = vi.fn<typeof fetch>(async (url) => {
     if (url === "/api/store/hire") return Response.json(hired);
     if (state === "unknown") return new Response("private-provider-details", { status: 404 });
+    if (state === "forbidden") return new Response("private-provider-details", { status: 403 });
     if (state === "failed") return Response.json({ status: "failed", receiptValid: false, note: "Guard Task failed — showing the local check" });
     return Response.json({ status: "completed", receiptValid: state !== "unverified", verdict: "APPROVE", reasons: [], diff: [],
       mandateDigest: bundle.digest, proposalDigest: state === "wrong-digest" ? "a".repeat(64) : presentation.proposalDigest });
@@ -111,7 +114,7 @@ it("uses only the local check after an ambiguous create failure, without a secon
 it("keeps server configuration and receipt loading out of the browser entry points", () => {
   for (const file of ["StoreClient.tsx", "store-browser.ts", "store-hire-browser.ts", "store-contract.ts", "store-hire-contract.ts"]) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
-    expect(source).not.toMatch(/process\.env|SOKOSUMI_COWORKER_API_KEY|SOKOSUMI_TASK_USER_ID|\.server["']|worker\/core/);
+    expect(source).not.toMatch(/process\.env|STORE_TASK_TOKEN_SECRET|SOKOSUMI_COWORKER_API_KEY|SOKOSUMI_TASK_USER_ID|\.server["']|worker\/core/);
   }
   expect(readFileSync(new URL("store-hire.server.ts", import.meta.url), "utf8")).toContain('import "server-only"');
 });
