@@ -17,7 +17,7 @@ export default function DemoPage() {
     <main className={styles.page}>
       <header className={styles.header}><Link href="/" className="desk-brand">AgentPay Guard</Link>
         <h1>Two offers.<br />One signed intent.</h1>
-        <p>Read the offer. Follow the Guard Check. Compare the outcome.</p>
+        <p>Read the offer. Follow the Guard Check. Compare the outcome.</p><Link href="/store">Try the attack</Link>
       </header>
       <div id="demo-runs"><DemoArena runs={runs} /></div>
     </main>
