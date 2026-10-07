@@ -22,7 +22,10 @@ export async function hireStoreFromBrowser(injection: string | null, options: { 
     const note = "Guard could not be hired — showing the local check";
     return { ...local, note, steps: [...local.steps, note] };
   }
-  if (hired.mode === "local") return { ...await presentStoreResult(hired), note: hired.note };
+  if (hired.mode === "local") {
+    const { live, bundle, ...local } = hired;
+    return { ...await presentStoreResult(local), note: hired.note, ...(live && options.liveKey ? { live: true, bundle } : {}) };
+  }
   const local = { ...await presentStoreResult(hired.local), ...(hired.live && options.liveKey ? { live: true, bundle: hired.bundle } : {}) };
   const steps = [...hired.steps, "Guard is checking…"];
   options.onSteps?.(steps);

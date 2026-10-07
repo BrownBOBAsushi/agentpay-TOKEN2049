@@ -70,7 +70,10 @@ export function createStoreHireService(options: { bundle: MandateBundle; env: ()
       const preCheck = `Instant pre-check (same Guard code): ${prediction.verdict}${prediction.verdict === "REFUSE"
         || live ? " — hiring the Guard on Sokosumi to sign it" : " — not hiring on the public page (one-time Mandate)"}`;
       const local = { ...prediction, steps: [...prediction.steps.slice(0, -1), preCheck] };
-      const fallback = (note: string) => ({ ...local, mode: "local", note, steps: [...local.steps, note] });
+      const fallback = (reason: string) => {
+        const note = live ? `${reason} — local check only — not hired, not paid` : reason;
+        return { ...local, mode: "local", note, steps: [...local.steps, note], ...(live ? { live: true, bundle } : {}) };
+      };
       if (!live && local.verdict === "APPROVE") return json(fallback("APPROVE is not hired on the public page — one-time Mandate; see the recorded paid run"));
       const cfg = config();
       if (!cfg) return json(fallback("Guard hiring is not configured — showing the local check"));

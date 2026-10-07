@@ -28,7 +28,8 @@ const env = { STORE_LIVE_KEY: liveKey, SOKOSUMI_API_URL: "https://api.preprod.so
   SOKOSUMI_COWORKER_API_KEY: "TEST-CORE-CREDENTIAL", SOKOSUMI_COWORKER_ID: "test-guard",
   SOKOSUMI_TASK_USER_ID: "test-user", GUARD_ADDRESS: guardAddress };
 const origin = "https://store.test", txHash = "ab".repeat(32), taskId = "live-store-task";
-function setup(settings: { payFailure?: boolean; offer?: "bad" | "unavailable"; changedInputs?: boolean; wrongStatusDigest?: boolean } = {}) {
+function setup(settings: { payFailure?: boolean; offer?: "bad" | "unavailable"; changedInputs?: boolean; wrongStatusDigest?: boolean;
+  missingCoreConfig?: boolean; taskCreateFailure?: boolean } = {}) {
   const time = Date.now(); vi.spyOn(Date, "now").mockReturnValue(time);
   const fixture = createDevMandate({ payee: STORE_PAYEE, amount: "6500000" });
   let inputs: { mandateBundle: MandateBundle; proposal: SpendProposal };
@@ -49,6 +50,7 @@ function setup(settings: { payFailure?: boolean; offer?: "bad" | "unavailable"; 
     }
     expect(url.origin).toBe("https://api.preprod.sokosumi.com");
     if (init?.method === "POST") {
+      if (settings.taskCreateFailure) throw new Error(liveKey + " private provider detail");
       inputs = JSON.parse(JSON.parse(String(init.body)).description);
       return Response.json({ data: { id: taskId } });
     }
@@ -62,7 +64,8 @@ function setup(settings: { payFailure?: boolean; offer?: "bad" | "unavailable"; 
     return Response.json({ data: { id: taskId, status: "COMPLETED", description: JSON.stringify(settings.changedInputs
       ? { ...inputs, proposal: { ...inputs.proposal, requirements: { ...inputs.proposal.requirements, amount: "28000000" } } } : inputs) } });
   });
-  const service = createStoreHireService({ bundle: fixture, env: () => env, fetch: upstream, now: () => time });
+  const service = createStoreHireService({ bundle: fixture, env: () => ({ ...env,
+    ...(settings.missingCoreConfig ? { SOKOSUMI_COWORKER_API_KEY: undefined } : {}) }), fetch: upstream, now: () => time });
   const pay = vi.fn<typeof fetch>(async (_input, init) => {
     expect(new Headers(init?.headers).get("x-store-live-key")).toBe(liveKey);
     expect(JSON.parse(String(init?.body))).toEqual({ taskId });
@@ -102,10 +105,34 @@ it("live Buy with injection OFF fetches a real x402 402, hires APPROVE, pays onc
   expect(log).not.toHaveBeenCalled(); expect(error).not.toHaveBeenCalled();
 });
 it.each([undefined, "wrong-key"])("missing/wrong live key %s retains public local APPROVE and never hires or pays", async (key) => {
-  const test = setup();
-  const result = await hireStoreFromBrowser(null, { liveKey: key, mandateBundle: { invalid: true }, fetch: test.browser });
+  const test = setup(), uploaded = createDevMandate({ payee: STORE_PAYEE, amount: "6500000" });
+  const result = await hireStoreFromBrowser(null, { liveKey: key, mandateBundle: uploaded, fetch: test.browser });
   expect(result).toMatchObject({ verdict: "APPROVE", note: expect.stringContaining("one-time Mandate") });
-  expect(result.live).toBeUndefined(); expect(test.upstream).not.toHaveBeenCalled(); expect(test.pay).not.toHaveBeenCalled();
+  expect(result.live).toBeUndefined(); expect(result.bundle).toBeUndefined();
+  expect(test.upstream).not.toHaveBeenCalled(); expect(test.pay).not.toHaveBeenCalled();
+  const html = renderToStaticMarkup(h(StoreVerdict, { bundle: result.bundle ?? test.fixture, result, testKey: false }));
+  expect(html).toContain(`title="${test.fixture.digest}"`); expect(html).not.toContain(uploaded.mandate.nonce);
+  expect(html).toContain("Recorded paid run"); expect(html).not.toContain("local check only — not hired, not paid");
+});
+it.each(["missing Core config", "rate limit", "Task-create failure"])("live %s fallback preserves the distinct uploaded cheque without polling or paying", async (kind) => {
+  const test = setup({ missingCoreConfig: kind === "missing Core config", taskCreateFailure: kind === "Task-create failure" });
+  const uploaded = createDevMandate({ payee: STORE_PAYEE, amount: "6500000" });
+  expect(uploaded.digest).not.toBe(test.fixture.digest);
+  if (kind === "rate limit") expect((await (await test.service.hire(hireRequest(null))).json()).mode).toBe("hired");
+  const postsBefore = test.upstream.mock.calls.filter(([, init]) => init?.method === "POST").length;
+  const result = await test.run(null, liveKey, uploaded);
+  expect(result).toMatchObject({ live: true, bundle: uploaded, verdict: "APPROVE", mandate: { payer: uploaded.mandate.payer } });
+  expect(result.note).toContain("local check only — not hired, not paid");
+  expect(result.taskId).toBeUndefined(); expect(result.txHash).toBeUndefined(); expect(result.receiptValid).not.toBe(true);
+  expect(test.browser).toHaveBeenCalledTimes(1); expect(test.browser.mock.calls[0][0]).toBe("/api/store/hire");
+  expect(test.pay).not.toHaveBeenCalled();
+  expect(test.upstream.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(postsBefore + (kind === "Task-create failure" ? 1 : 0));
+  const html = renderToStaticMarkup(h(StoreVerdict, { bundle: result.bundle ?? test.fixture, result, testKey: false }));
+  expect(html).toContain(`title="${uploaded.digest}"`); expect(html).toContain(uploaded.mandate.nonce);
+  expect(html).not.toContain(`title="${test.fixture.digest}"`); expect(html).not.toContain(test.fixture.mandate.nonce);
+  expect(html).toContain("local check only — not hired, not paid"); expect(html).not.toContain("Recorded paid run");
+  expect(html).not.toContain("Paid on Cardano preprod"); expect(html).not.toContain("Signed Guard Receipt verified");
+  expect(html).not.toContain(liveKey); expect(JSON.stringify(result)).not.toContain("private provider detail");
 });
 it("uploaded signed Mandate binds the Task and token and succeeds across service instances", async () => {
   const test = setup(), uploaded = createDevMandate({ payee: STORE_PAYEE, amount: "6500000" });
