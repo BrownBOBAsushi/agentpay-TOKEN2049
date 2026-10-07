@@ -169,3 +169,16 @@
   Guard does not depend on the model's behaviour, so a scripted compromised agent is honest when labeled,
   and the check itself is the real code on a real signature. Judges can try it after the deadline.
 - **Status:** Accepted.
+
+## DEC-T17 — `/store` hires the real Guard on Sokosumi (one-line flow)
+- **Date:** 2026-10-07
+- **Decision:** When the live check on `/store` predicts a REFUSE, the Vercel route creates a real Sokosumi
+  Task for our Coworker with the Coworker key on behalf of the user (`POST /v1/tasks`, header
+  `X-Context-User-Id`; the user approved the grant on 7 Oct). The hosted Worker runs the Guard Check and the
+  page shows the verified signed Receipt, with links to the Task on Sokosumi (owner view) and the public
+  `/receipt/<taskId>`. Verified by hand: Task `01a115be-d9e3-73f9-863d-9ecc0b2175be`, REFUSE in ~6 s.
+  An APPROVE is not hired from the public page (it would consume the Mandate nonce for every later
+  visitor); it stays the instant local check plus the recorded paid run. Public Task sharing is owner-only
+  (403 for agent keys), so the public link is our `/receipt/<taskId>`. Hires are rate-limited.
+- **Why:** The user asked for one continuous flow with no terminal; DEC-T16's local check stays the fallback.
+- **Status:** Accepted.
