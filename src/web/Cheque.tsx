@@ -25,6 +25,7 @@ type ReadChequeProps = {
   bundle: MandateBundle; heading: ReactNode; presented?: { payee: string; amount: string; asset?: string; network?: string };
   patternDigest?: string; stamp?: ReactNode; actions?: ReactNode; signatureNote?: string; tilt?: number; pencilRings?: boolean;
   ringFields?: string[]; otherDiffs?: { field: string; signed: string; proposed: string }[];
+  payeeName?: string;
 };
 type EditChequeProps = { edit: ReactNode; heading: ReactNode; patternDigest: string | null; stubMandate?: MandateBundle["mandate"]; signed?: boolean };
 
@@ -48,7 +49,7 @@ export function Cheque(props: ReadChequeProps | EditChequeProps) {
       <div className="printed-legend"><span className="legend-brand"><EngravedSeal />AgentPay Guard</span><span className={props.pencilRings && props.ringFields?.includes("network") ? "ring-target" : undefined}><span className="value">{presented?.network ?? m.network}</span>{props.pencilRings && props.ringFields?.includes("network") && <PencilRing fit />}</span></div>
       {heading}
       <div className="cheque-fields">
-        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span><FieldValue signed={m.payee} proposed={presented?.payee} pencilRings={props.pencilRings && (props.ringFields?.includes("payee") ?? true)} /></div>
+        <div className="payee-line ruled-field"><span className="field-label">Pay to the order of</span>{props.payeeName && <span className="field-label">{props.payeeName}</span>}<FieldValue signed={m.payee} proposed={presented?.payee} pencilRings={props.pencilRings && (props.ringFields?.includes("payee") ?? true)} /></div>
         <div className="amount-box"><span className="field-label">Amount</span><FieldValue signed={humanAmount(m.amount)} proposed={presented ? humanAmount(presented.amount, presented.asset) : undefined} detail={`${groupAtomic(presented?.amount ?? m.amount)} ${presented?.asset ?? m.asset}`} pencilRings={props.pencilRings && (!props.ringFields || props.ringFields.includes("amount"))} /></div>
         {stamp && <div className="stamp-placement">{stamp}</div>}
         <div className="memo-line ruled-field"><span className="field-label">Memo</span><span className="value">{m.purpose}</span></div>

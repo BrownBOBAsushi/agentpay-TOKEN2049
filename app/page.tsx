@@ -16,7 +16,7 @@ export default function Home() {
       <section className="opening desk-opening" aria-label="The signed Mandate">
         <div className="desk-promise"><span className="desk-brand">AgentPay Guard</span><h1>An agent can only spend<br className="desktop-break" /> what its human signed.</h1></div>
         <div className="opening-paper"><Cheque bundle={landingBundle} tilt={-1.2} heading={null} /></div>
-        <nav className="desk-actions" aria-label="Get started"><Link className="primary-link" href="/mandate">Sign a Mandate</Link><Link className="secondary-link" href="/receipt/01a10ff9-5009-73d6-903e-7a5effdb30d0">Read a real refusal</Link><Link className="secondary-link" href="/demo">Replay the demo</Link></nav>
+        <nav className="desk-actions" aria-label="Get started"><Link className="primary-link" href="/mandate">Sign a Mandate</Link><Link className="secondary-link" href="/receipt/01a10ff9-5009-73d6-903e-7a5effdb30d0">Read a real refusal</Link><Link className="secondary-link" href="/demo">Replay the demo</Link><Link className="secondary-link" href="/store">Try the attack</Link></nav>
       </section>
       <LandingScene reasons={verdict.reasons}
         signed={<Cheque bundle={landingBundle} tilt={-1.2} heading={null} />}

@@ -1,0 +1,54 @@
+.shop { min-height: 100svh; background: #faf4ea; color: #442b22; font-family: var(--font-prose), sans-serif; caret-color: #442b22; }
+.shopInner { max-width: 1008px; padding: 48px 56px 64px; margin: auto; }
+.shop :global(:focus-visible) { outline-color: #442b22; }
+.shop :global(::selection) { background: #442b22; color: #faf4ea; }
+.shopHeader { border-bottom: 1px solid #d9c7b5; padding-bottom: 28px; margin-bottom: 32px; }
+.shopHeader h1 { font: 700 28px/1.2 var(--font-prose), sans-serif; letter-spacing: -.02em; color: #442b22; margin: 0 0 8px; }
+.shopHeader p { color: #776455; font-size: 14px; }
+.product { max-width: 716px; }
+.productImage { height: 260px; background: #c7996b; border-radius: 18px; margin-bottom: 28px; }
+.product h2 { font: 700 32px/1.2 var(--font-prose), sans-serif; color: #442b22; margin: 0 0 24px; letter-spacing: -.02em; }
+.price { color: #a43e17; font-size: 20px; font-weight: 600; }
+.currencyNote { color: #776455; font-size: 13px; margin: 6px 0 24px; }
+.description > p { font-size: 16px; margin-bottom: 28px; }
+.reveal { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; padding: 8px 16px; background: #fff; border: 1px solid #bca48e; border-radius: 24px; color: #442b22; font-size: 14px; font-weight: 600; }
+.reveal:hover { background: #f2e7da; }
+.injectionBox { border: 1px dashed #b3261e; background: #fcebea; padding: 16px; margin-bottom: 24px; border-radius: 14px; }
+.injectionBox p { color: #9d2318; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.injectionBox code { color: #442b22; font-size: 13px; white-space: pre-wrap; display: block; }
+.buy, .send { min-height: 48px; padding: 12px 24px; border: 1px solid #442b22; border-radius: 28px; color: #fff; background: #442b22; font-weight: 600; }
+.buy { display: inline-flex; gap: 14px; align-items: center; margin-top: 28px; }
+.buy:hover, .send:hover { background: #62402f; }
+.shop button:disabled { color: #776455; background: #eee2d4; border-color: #bca48e; cursor: wait; }
+.description button:disabled { cursor: not-allowed; }
+.controls { max-width: 716px; margin-top: 48px; padding-top: 32px; border-top: 1px solid #d9c7b5; }
+.controls fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.controls legend { font-size: 22px; font-weight: 600; margin-bottom: 18px; padding: 0; }
+.switch { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; font-weight: 600; width: fit-content; min-height: 44px; cursor: pointer; }
+.switch input { width: 22px; height: 22px; accent-color: #442b22; }
+.controls label:not(.switch) { display: block; font-size: 14px; margin-bottom: 8px; }
+.controls textarea { width: 100%; min-height: 112px; resize: vertical; background: #fffaf3; color: #442b22; border: 1px solid #bca48e; border-radius: 8px; padding: 14px; font-size: 14px; line-height: 1.6; }
+.counter { color: #776455; font-size: 13px; text-align: right; margin-top: 6px; }
+.chat { margin: 28px 0 18px; }
+.previewNote { margin-top: 18px; font-size: 14px; color: #776455; }
+.error { color: #9d2318; margin-top: 18px; }
+.status { font-size: 14px; margin-top: 16px; }
+.status:empty { display: none; }
+.shopNav { display: flex; flex-wrap: wrap; gap: 16px 24px; font-size: 14px; margin-top: 36px; }
+.bank { padding-top: 56px; padding-bottom: 80px; }
+.bankHeading { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: end; gap: 24px; margin-bottom: 24px; }
+.bankHeading h2 { font-size: clamp(32px, 3.4vw, 48px); margin-top: 16px; color: #e6ede7; scroll-margin-top: 24px; }
+.bankHeading > p { font: 400 30px/1.2 var(--font-legends), serif; color: #e6ede7; }
+.honestNote { color: #c3d1c9; max-width: 75ch; margin-bottom: 42px; }
+.agentLog { padding-left: 24px; margin: 0; }
+.agentLog li { padding: 10px 0; border-bottom: 1px solid #9db7c2; overflow-wrap: anywhere; }
+@media (max-width: 639px) {
+  .shopInner { padding: 28px 20px 40px; }
+  .shopHeader { padding-bottom: 24px; margin-bottom: 24px; }
+  .shopHeader h1 { font-size: 26px; }
+  .productImage { height: 180px; }
+  .controls { margin-top: 36px; padding-top: 28px; }
+  .bankHeading { display: block; }
+  .bankHeading > p { margin-top: 18px; }
+  .buy, .send { width: 100%; justify-content: center; }
+}

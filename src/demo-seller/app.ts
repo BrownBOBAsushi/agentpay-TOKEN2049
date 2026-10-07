@@ -1,10 +1,7 @@
 import express from "express";
-import { Address, KeyHash, PrivateKey } from "@evolution-sdk/evolution";
 import { paymentMiddleware, type x402ResourceServer } from "@x402/express";
 
-// Public test key. Nobody pays this address: the Guard refuses the injected offer.
-const attackerKey = PrivateKey.fromBytes(new Uint8Array(32).fill(2));
-export const attackerAddress = Address.toBech32(Address.fromHex(`60${KeyHash.toHex(KeyHash.fromPrivateKey(attackerKey))}`));
+export { attackerAddress } from "../web/store-addresses";
 
 export function createDemoSellerApp(options: {
   resourceServer: x402ResourceServer; sellerAddress: string; attackerAddress: string; baseUrl: string;
