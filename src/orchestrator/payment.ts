@@ -70,12 +70,31 @@ export function blockfrostLookup(env: NodeJS.ProcessEnv, fetchTx: Fetch) {
   };
 }
 
-export async function payApproved(proposal: SpendProposal, endpoint: string, deps: {
+export type PaymentDeps = {
   fetch: Fetch; createHeaders: (required: PaymentRequired, mandateExpiry: number) => Promise<Record<string, string>>;
   sleep: (ms: number) => Promise<void>;
   lookupTransaction: (txHash: string) => Promise<boolean>;
   log?: (line: string) => void;
-}, journal: Journal, id: ActionId, mandateExpiry: number): Promise<Payment> {
+};
+export type PaymentOperation = (proposal: SpendProposal, endpoint: string, id: ActionId, mandateExpiry: number) => Promise<Payment>;
+
+// Server callers get the CLI's payment checks with a separate journal and injected I/O.
+// The whole read/sign/send/save sequence holds the journal lock, including retries.
+export function createPaymentRunner(options: { journalPath: string; deps?: PaymentDeps; env?: NodeJS.ProcessEnv }): PaymentOperation {
+  const journal = new Journal(options.journalPath);
+  const env = options.env ?? process.env;
+  const deps = options.deps ?? { fetch, createHeaders: walletHeaders(env),
+    sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+    lookupTransaction: blockfrostLookup(env, fetch), log: () => {} };
+  return (proposal, endpoint, id, mandateExpiry) => journal.withLock(async () => {
+    if (id.action !== "pay") throw new StopError("expected a payment action");
+    const savedId = await journal.getPaymentId(id.taskId);
+    return payApproved(proposal, endpoint, deps, journal, savedId ?? id, mandateExpiry);
+  });
+}
+
+export async function payApproved(proposal: SpendProposal, endpoint: string, deps: PaymentDeps,
+  journal: Pick<Journal, "get" | "set">, id: ActionId, mandateExpiry: number): Promise<Payment> {
   let saved = await journal.get(id);
   const resumed = saved?.state === "prepared";
   if (saved?.state === "signing") throw new StopError("payment signing was interrupted; do not build a second transaction");
