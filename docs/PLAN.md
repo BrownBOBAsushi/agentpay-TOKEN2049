@@ -52,9 +52,9 @@
 - [ ] Deploy to Vercel (user says "deploy") · design finish review + `DESIGN.md`.
 
 ### M4 — Demo Orchestrator + x402 (h19–h25) — cards T-017 (seller + Orchestrator), T-018 (`/demo`), DEC-T14
-- [ ] demo-seller: x402-paid route on preprod (template `x402-express`).
-- [ ] Orchestrator: reads page → proposal → hires Guard → pays on APPROVE only.
-- [ ] Injected page variant changes payee + amount → REFUSE with Diff.
+- [x] demo-seller: x402-paid route on preprod (T-017 merged 257ef11; live tx `0a879641…`, EVIDENCE M4).
+- [x] Orchestrator: reads page → proposal → hires Guard → pays on APPROVE only. (T-017; one-run settle = T-019)
+- [x] Injected page variant changes payee + amount → REFUSE with Diff. (Tasks `01a1147b-20bd…`, `01a11491-13d8…`)
 - [ ] ~~Matcher `cardano-tx` + metadata 674 link~~ — cut (DEC-T14, cut list 5).
 - [ ] `/demo` arena: S1 / S2 buttons, live log.
 
