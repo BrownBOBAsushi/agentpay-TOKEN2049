@@ -1,4 +1,15 @@
-# HANDOFF — orch session 3 (2026-10-07, ~13:45 SGT)
+# HANDOFF — orch session 3, evening (2026-10-07 ~19:50 SGT)
+
+- Live: https://agentpay-guard-cardano.vercel.app — `/store` one-line flow (hire Guard on Sokosumi) and the
+  private live pay mode (user holds the link; key in `.env.local` `STORE_LIVE_KEY`). Evidence: EVIDENCE "/store live".
+- Branch `release/m4-demo` = PR #2 (open; **user merges** — JARVIS invariant: no AI push to main). Deployed from it.
+- Agents: sol + sol2 builders, astra reviewer. sol2's folder: `~/Github/agentpay-sol2` (own worktree; Codex sandbox
+  cannot commit there — orch commits). T-023 round 2 (`0a58ed8`, request budgets + tx-hash completion) under
+  astra review; **deploy it only after the user finishes recording**.
+- User: recording the video now (script in chat; runbook `docs/DEMO.md`), then slides + submission (write-up
+  `docs/WRITEUP.md`). Open: Sokosumi listing URL, event workspace ID, move seeds out of `~/.masumi-seed-backup.log`.
+
+## Earlier: orch session 3 (2026-10-07, ~13:45 SGT)
 
 > Session 3 status (supersedes "Where we are" / "Next steps" below where they conflict).
 - Roles this session: **sol builds, astra reviews** (user override, WORKFLOW).

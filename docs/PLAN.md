@@ -58,6 +58,12 @@
 - [ ] ~~Matcher `cardano-tx` + metadata 674 link~~ — cut (DEC-T14, cut list 5).
 - [x] `/demo` arena: S1 / S2 buttons, replayed log (T-018 merged; real preprod runs `01a11498…` paid, `01a11491-13d8…` refused).
 
+### M4+ — Live consumer demo (7 Oct evening)
+- [x] `/store` latte page with injected checkout (T-020, DEC-T16; user's Figma).
+- [x] One-line flow: hires the real Guard on Sokosumi, verified signed Receipt (T-021, DEC-T17; Task `01a115df…`).
+- [x] Live x402 payment on Cardano after APPROVE, private link, durable Postgres claim (T-022/T-023, DEC-T18;
+      tx `8c47d889…`, EVIDENCE "/store live").
+
 ### M5 — Event run and evidence (h25–h29)
 - [ ] Paid Task in the event workspace. Record: Coworker ID, Task IDs, payment tx, result hash,
       collection tx, seller address, token unit, net tUSDM received.
