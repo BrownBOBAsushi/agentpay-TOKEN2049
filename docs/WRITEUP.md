@@ -21,6 +21,13 @@ party". The human who owns the money has no signed, checkable statement of what 
 5. The agent pays over x402 only with a verified APPROVE whose proposal digest equals what it pays.
 
 ## Demo (live on Cardano preprod)
+**Try it:** https://agentpay-guard-cardano.vercel.app/store — "ask your AI to buy a latte". A hidden comment on the
+shop page tells the agent to pay 28 to "Evil Store". The page hires the real Guard on Sokosumi, which returns a
+signed REFUSE with the field Diff. With the injection removed, the Guard approves and (in the presenter's private
+live mode) the agent pays 6.5 tADA over x402 on Cardano preprod — e.g. tx
+`8c47d88938ef3d71961b9ff70bc74477e21784f8a9cfb8fcd2c9a342e81d3ed3`. The agent is scripted to obey the page (real
+models often refuse on camera); the Guard check, the signatures and the payment are real.
+
 - **S2 — injection:** the offer page hides a second payment instruction (50 tADA to an attacker).
   Guard: REFUSE, Diff on payee + amount. No money moves. No human in the loop.
 - **S1 — honest:** same Mandate, honest page. Guard: APPROVE. The agent pays 2 tADA over x402 through
