@@ -10,6 +10,9 @@
 | **Builder** | `astra` | codex | Implements one task card on its branch. Runs tests. Writes a short build report. | Change scope, edit decisions, merge to `main`. |
 | **Reviewer** | `sol` | codex | Reviews the branch diff against the task card and the hard rules. Writes a review file. | Edit code. Approve without running the tests. |
 
+**Session 3 (7 Oct), user override:** `sol` (gpt-6.1-sol, high) is the **builder** and `astra`
+(gpt-6-astra, medium) is the **reviewer**. Swap the two names in the table and the loop below.
+
 The human does: account sign-ups, wallet signing, faucet claims, secrets, and final approval
 of anything outward-facing (deploy to public URL, Sokosumi listing, submission).
 

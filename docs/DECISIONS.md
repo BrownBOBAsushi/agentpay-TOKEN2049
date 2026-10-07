@@ -123,3 +123,35 @@
   20 preprod blocks took ~9.5 min that day. The demo's +5 min payBy needs a faster MPS. Lowering
   the MPS threshold is the human's choice (it weakens rollback safety); wider offsets work either way.
 - **Status:** Accepted.
+
+## DEC-T14 — M4 demo shape (Orchestrator, demo-seller, /demo)
+- **Date:** 2026-10-07
+- **Decision:**
+  - **demo-seller** is a local Express app (`@x402/express`, all `@x402/*` pinned to 2.26.0) against the
+    hosted preprod facilitator. It sells "market data" for 2 tADA (`lovelace`, `2000000`) to
+    `DEMO_SELLER_ADDRESS`. It also serves two offer pages (honest and injected) and an "attacker" route that
+    stands in for an attacker server (50 tADA to a fixed attacker address).
+  - **Orchestrator** is a deterministic "naive agent", not an LLM. It obeys the last payment instruction in
+    the page text, which models a prompt-injected LLM. Reason: no paid model credit (user rule), and the
+    demo is repeatable. `MODEL_API_KEY` stays unused.
+  - The Orchestrator **hires the Guard with a free Sokosumi Task** (`sokosumi --preprod tasks create
+    --personal`, user OAuth on the Mac). The hosted Worker (free mode) runs it. The Orchestrator reads the
+    Receipt from the COMPLETED event `comment` and verifies it locally before it trusts the Verdict.
+  - It pays only on a verified `APPROVE`, and only for x402 requirements whose proposal digest equals the
+    approved one. Pay is idempotent per `{taskId, eventId, "pay"}`.
+  - **`/demo`** replays recorded run transcripts (`public/demo-runs/*.json`) from real preprod runs, with
+    links to `/receipt/<taskId>` and Cardanoscan. Vercel cannot run the `sokosumi` CLI, so no live mode.
+  - **Cut:** `cardano-tx` matcher + metadata 674 link (PLAN cut list item 5).
+- **Why:** Fits the time left (deadline 7 Oct 22:00), spends no paid credit, and keeps the S2 injection demo
+  (never cut).
+- **Status:** Accepted.
+
+## DEC-T15 — SPIKE S3 answered: Lace signData bundle verifies
+- **Date:** 2026-10-07
+- **Decision:** A real Lace (preprod, account Cardano #0, base address `addr_test1qprr4fdz…ets72`) `signData`
+  result, as packed by `/mandate`, passes `verifyMandate` unchanged (`{ok:true}`; digest recomputes; signer =
+  payer). Saved as `src/guard/fixtures/bundle.wallet.json`; the cip8 wallet test is no longer skipped. The
+  bundle is the hero Mandate for the recorded S1 run: 2 tADA (`lovelace` `2000000`) to `DEMO_SELLER_ADDRESS`,
+  expiry 2026-10-07 15:59 UTC, nonce `d14e4b3e…8c68c1`. Eternl not tested (PLAN S3 fallback: one wallet).
+- **Why:** Closes S3 and PLAN M1 with a real wallet, not a test key.
+- **Status:** Accepted.

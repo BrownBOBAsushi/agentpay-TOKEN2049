@@ -101,8 +101,8 @@ it.each(["coseSign1", "coseKey"] as const)("does not throw on malformed CBOR in 
   expect(guard.verifyMandate({ ...fixture, [field]: "ff" })).toEqual({ ok: false, reason: "SIG_INVALID" });
 });
 
-it.skip("verifies a Lace/Eternl signData bundle", () => {
-  // Orch supplies this fixture after SPIKE S3; enable this test when it is available.
+it("verifies a Lace/Eternl signData bundle", () => {
+  // Real Lace (preprod) signData bundle, signed by the user on /mandate (SPIKE S3, 2026-10-07).
   const bundle = JSON.parse(readFileSync(new URL("./fixtures/bundle.wallet.json", import.meta.url), "utf8"));
   expect(guard.verifyMandate(bundle)).toEqual({ ok: true });
 });

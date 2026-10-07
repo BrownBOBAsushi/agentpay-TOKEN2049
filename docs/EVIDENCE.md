@@ -47,3 +47,17 @@
 | Result hash | `49bf447d44c7ea9f1460aff726b5b53d6a82fa8634e98f42a1533ec698589c6f` = sha256(COMPLETED result) = MPS on-chain resultHash · result tx `a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32` Confirmed ResultSubmitted (submitted 10:37, deadline 11:22) | https://preprod.cardanoscan.io/transaction/a3609fa45c44de6a85e8d1bec40d0d6844da5129e25f5ee27ac0c7c9747f5c32 |
 | Collection tx | `8ef677dc278f4f11a4a15c3fd4af80394e3b13626c7cecb4ade2abee74bc1526` · block 5260473 · 11:48:28 UTC · MPS auto-withdraw after unlock 11:37 · Core receipt `Withdrawn`, `settled: true`, same txHash | https://preprod.cardanoscan.io/transaction/8ef677dc278f4f11a4a15c3fd4af80394e3b13626c7cecb4ade2abee74bc1526 |
 | Net tUSDM received | **1.000000 tUSDM** (1000000 atomic, unit `16a55b2a…0014df10745553444d`) at selling address `addr_test1qzh3ask7…ct29t8`, measured as outputs − inputs in the collection tx via Blockfrost; seller net lovelace −3638695 (tx fee 673175) | Blockfrost `GET /txs/{hash}/utxos` |
+
+## M4 — Orchestrator + x402 demo (preprod, 2026-10-07, test-key Mandates)
+
+Orchestrator wallet `addr_test1qrakfmhm…lsvx3jy5` (faucet tx `995948f9fdbffb815183b0eed65e040ac8f286ce5f07bfe7a2f237162103e934`,
+10 000 tADA). Seller = `DEMO_SELLER_ADDRESS` (selling wallet `addr_test1qzh3ask7…ct29t8`). Hosted x402 facilitator
+`https://x402.preprod.dev.ecosyseng.cf-deployments.org`. Guard = hosted Worker (free Task).
+
+| Item | Value | Verified by |
+|---|---|---|
+| S2 injection (run 1) | Task `01a1147b-20bd-726b-a64c-db07a570e689` · REFUSE `PAYEE_MISMATCH`+`AMOUNT_MISMATCH` (2 000 000 → 50 000 000 lovelace, attacker `addr_test1vqqgk3uy…kz22us`) · Receipt trusted · no payment · 15 s | Orchestrator log, `sokosumi tasks events` |
+| S1 honest (run 1) | Task `01a1147b-73fe-726a-8742-cfc609bc2daa` · APPROVE trusted · tx `0a879641dc19c74f92a95fb6db081fbfdb7fe72126a0a0e7df1410a2d61221b7` (block 5262997, 2 000 000 lovelace to seller, one tx) · recorded `confirmed-on-chain` on resume after T-017 fix | Blockfrost `GET /txs/{hash}/utxos`; https://preprod.cardanoscan.io/transaction/0a879641dc19c74f92a95fb6db081fbfdb7fe72126a0a0e7df1410a2d61221b7 |
+| S2 injection (rehearsal 2) | Task `01a11491-13d8-7515-bfae-584acd44730d` · REFUSE payee + amount · no payment · 11.7 s | Orchestrator log |
+| S1 honest (rehearsal 2) | Task `01a11491-3fab-76a9-b0b8-df7cce02ef17` · APPROVE · tx `37e05757f34867f5b55e5c2dd03fbfce1118247a3ebe3d8e005bf275c9bd550a` (block 5263054, 04:15:04 UTC) · first run stopped at ~62 s before settle (T-019), resume recorded `confirmed-on-chain` | https://preprod.cardanoscan.io/transaction/37e05757f34867f5b55e5c2dd03fbfce1118247a3ebe3d8e005bf275c9bd550a |
+| Real wallet Mandate (S3) | Lace preprod, payer `addr_test1qprr4fdz…ets72`, nonce `d14e4b3e…8c68c1`, `verifyMandate` ok (DEC-T15) — reserved for the recorded S1 run | `src/guard/cip8.test.ts` |
