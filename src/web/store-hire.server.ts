@@ -70,8 +70,10 @@ export function createStoreHireService(options: { bundle: MandateBundle; env: ()
       const preCheck = `Instant pre-check (same Guard code): ${prediction.verdict}${prediction.verdict === "REFUSE"
         || live ? " — hiring the Guard on Sokosumi to sign it" : " — not hiring on the public page (one-time Mandate)"}`;
       const local = { ...prediction, steps: [...prediction.steps.slice(0, -1), preCheck] };
-      const fallback = (reason: string) => {
-        const note = live ? `${reason} — local check only — not hired, not paid` : reason;
+      const fallback = (reason: string, creationUnconfirmed = false) => {
+        const note = live ? `${reason} — ${creationUnconfirmed
+          ? "local check only; payment was not requested. A Guard Task may have been created — check Sokosumi before retrying"
+          : "local check only — not hired, not paid"}` : reason;
         return { ...local, mode: "local", note, steps: [...local.steps, note], ...(live ? { live: true, bundle } : {}) };
       };
       if (!live && local.verdict === "APPROVE") return json(fallback("APPROVE is not hired on the public page — one-time Mandate; see the recorded paid run"));
@@ -106,7 +108,7 @@ export function createStoreHireService(options: { bundle: MandateBundle; env: ()
             proposalDigest: proposalDigest(local.proposal) }, cfg.tokenKey, Math.floor(now() / 1000));
           return { mode: "hired", taskId: data.id, taskToken, steps: [...local.steps, `Guard hired on Sokosumi — Task ${data.id}`],
             proposal: local.proposal, local, ...(live ? { live: true, bundle } : {}) };
-        } catch { return fallback("Guard could not be hired — showing the local check"); }
+        } catch { return fallback(live ? "Guard Task creation could not be confirmed" : "Guard could not be hired — showing the local check", true); }
       })();
       if (key) requests.set(key, { at: time, fingerprint, result });
       return json(await result);

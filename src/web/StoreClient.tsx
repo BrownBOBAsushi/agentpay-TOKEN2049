@@ -66,7 +66,7 @@ export function StoreVerdict({ bundle, result, testKey, headingRef }: {
         </section>)}
         {returned ? <><ul className={receipt.reasonCodes}>{result.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul><p>No payment made.</p></>
           : result.live ? <div className={receipt.slipSettlement}>
-            <p>{result.txHash ? "Paid on Cardano preprod" : !result.taskId ? "Local check only — not hired, not paid" : "Payment not confirmed here"}</p>
+            <p>{result.txHash ? "Paid on Cardano preprod" : result.note ?? "Payment not confirmed here"}</p>
             {result.txHash && <><span className={`value ${styles.slipValue}`}>{result.txHash}</span>
               <a href={`https://preprod.cardanoscan.io/transaction/${result.txHash}`} referrerPolicy="no-referrer">View payment on Cardanoscan (preprod)</a></>}
           </div> : <><p>In the full flow the agent now pays over x402</p><div className={receipt.slipSettlement}>
