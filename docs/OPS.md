@@ -28,7 +28,7 @@
 | Postgres (local, retired) | Docker container `masumi-pg`, `127.0.0.1:5433`, volume `masumi-pg-data` — kept as a backup copy only | `docker start masumi-pg` after a reboot; Docker Desktop must run |
 | Guard Worker (**hosted**) | Railway service `agentpay-guard-worker`, deployed by `railway up` from `main` (Dockerfile, `node --import tsx src/worker/index.ts`), free mode (`PAID_TASKS_ENABLED` unset) | `railway logs --service agentpay-guard-worker`; holds the advisory lock in Railway `agentpay_guard` |
 | Guard Worker (local, retired) | this repo, `npm run worker` (reads `.env.local`) — **do not run while the hosted Worker runs**: two DBs, two Workers = the same Task twice | Logs one line per stage with Task ID. DB `agentpay_guard` in `masumi-pg` (role `agentpay_guard`). Rehearsal inputs: free Tasks with description JSON `{mandateBundle, proposal}` (DEC-T11) |
-| Web placeholder | Vercel project `agentpay-guard-cardano` → https://agentpay-guard-cardano.vercel.app | Deployed from a scratch folder, not from this repo (see "Vercel rule") |
+| Web (production) | Vercel project `agentpay-guard-cardano` → https://agentpay-guard-cardano.vercel.app | Deployed 2026-10-07 13:4x SGT by `vercel deploy --prod` from a clean worktree of `b8e1a33` (no `.env*` uploaded). `vercel.json` sets framework `nextjs` (project preset was "Other" → only `public/` served). Env (production, names only): `SOKOSUMI_API_URL`, `SOKOSUMI_COWORKER_API_KEY`, `GUARD_ADDRESS`, `NEXT_PUBLIC_TUSDM_UNIT`, `NEXT_PUBLIC_REPO_URL`. Vercel rule checked: SHA-256 `6299155…3cb5`. |
 | MPS OpenAPI | `mps-openapi.json` at repo root (gitignored) | Re-fetch: `curl http://127.0.0.1:3012/api-docs -o mps-openapi.json` |
 
 ## Secrets map (values never in git, chat, or logs)
