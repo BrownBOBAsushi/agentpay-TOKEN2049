@@ -55,7 +55,7 @@ export async function runOrchestrator(options: {
   scenario: "S1" | "S2"; offerUrl: string; mandateBundle: MandateBundle; guardAddress: string; coworkerId: string;
 }, deps: { fetch: Fetch; cli: CliRunner; journal: Journal; outputDir: string; log: (line: string) => void;
   sleep?: (ms: number) => Promise<void>; recorded?: boolean;
-  pay: (proposal: SpendProposal, endpoint: string, id: ActionId) => Promise<Payment>;
+  pay: (proposal: SpendProposal, endpoint: string, id: ActionId, mandateExpiry: number) => Promise<Payment>;
 }): Promise<RunTranscript> {
   const transcript: RunTranscript = { v: 1, scenario: options.scenario, recorded: deps.recorded ?? false,
     startedAt: new Date().toISOString(), offerUrl: options.offerUrl, injectedExcerpt: null, steps: [],
@@ -108,14 +108,13 @@ export async function runOrchestrator(options: {
         }
         transcript.payment = paid.payment; step("stop", "Payment already done; no second payment"); return;
       }
-      if (Math.floor(Date.now() / 1000) + proposal.requirements.maxTimeoutSeconds > options.mandateBundle.mandate.expiry) {
-        throw new StopError("Mandate expires before payment deadline; no payment");
-      }
       step("pay", "Check fresh requirements, then pay the approved proposal");
-      transcript.payment = await deps.pay(proposal, instruction.endpoint, id);
+      transcript.payment = await deps.pay(proposal, instruction.endpoint, id, options.mandateBundle.mandate.expiry);
       // The injected payer has the same journal contract as the real payer.
       await deps.journal.set(id, { state: "done", payment: transcript.payment, endpoint: instruction.endpoint, proposalDigest: proposalDigest(proposal) });
-      step("paid", `${transcript.payment.status}: ${transcript.payment.txHash}`);
+      step("paid", transcript.payment.status === "confirmed-on-chain"
+        ? `paid (confirmed on chain; seller response not received): ${transcript.payment.txHash}`
+        : `${transcript.payment.status}: ${transcript.payment.txHash}`);
     });
   } catch (error) {
     // SDK/CLI errors can contain credential or command data. Print controlled errors only.

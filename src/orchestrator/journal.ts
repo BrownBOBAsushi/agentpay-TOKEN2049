@@ -6,7 +6,7 @@ import { PaymentSchema } from "./transcript";
 export class StopError extends Error {}
 const actionSchema = z.object({ state: z.enum(["signing", "prepared", "done"]),
   headers: z.record(z.string(), z.string()).optional(), payment: PaymentSchema.optional(),
-  endpoint: z.string().optional(), proposalDigest: z.string().optional() });
+  endpoint: z.string().optional(), proposalDigest: z.string().optional(), txHash: z.string().regex(/^[0-9a-f]{64}$/).optional() });
 const journalSchema = z.object({ v: z.literal(1),
   hires: z.record(z.string(), z.object({ taskId: z.string().optional() })),
   actions: z.record(z.string(), actionSchema) });

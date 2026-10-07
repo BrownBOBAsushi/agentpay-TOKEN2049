@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const PaymentSchema = z.object({ txHash: z.string().regex(/^[0-9a-f]{64}$/),
-  network: z.literal("cardano:preprod"), status: z.enum(["confirmed", "mempool", "pending"]) });
+  network: z.literal("cardano:preprod"), status: z.enum(["confirmed", "confirmed-on-chain", "mempool", "pending"]) });
 export type Payment = z.infer<typeof PaymentSchema>;
 export const RunTranscriptSchema = z.object({
   v: z.literal(1), scenario: z.enum(["S1", "S2"]), recorded: z.boolean(),

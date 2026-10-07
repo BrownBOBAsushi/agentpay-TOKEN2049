@@ -6,7 +6,8 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import type { ClientCardanoSignInput } from "@x402/cardano";
 import type { PaymentRequired } from "@x402/core/types";
-import { Address, KeyHash, PrivateKey } from "@evolution-sdk/evolution";
+import { Address, CBOR, KeyHash, PrivateKey, SlotConfig, Transaction, TransactionBody, TransactionHash } from "@evolution-sdk/evolution";
+import { encodePaymentSignatureHeader } from "@x402/core/http";
 import { afterEach, expect, it, vi } from "vitest";
 import { guardCheck, proposalDigest, signReceipt, verifyMandate, type SignedReceipt, type SpendProposal } from "../guard";
 import fixture from "./fixtures/sokosumi-task-events-s1.json";
@@ -37,6 +38,16 @@ function required(p = proposal): PaymentRequired {
 }
 function response402(p = proposal) {
   return new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": Buffer.from(JSON.stringify(required(p))).toString("base64") } });
+}
+function testPayment() {
+  // Synthetic CBOR for an injected signer; no real wallet or ledger transaction.
+  const config = SlotConfig.getSlotConfig("Preprod");
+  const ttl = config.zeroSlot + (BigInt(Date.now() + 600_000) - config.zeroTime) / BigInt(config.slotLength);
+  const bytes = CBOR.toCBORBytes([new Map<CBOR.CBOR, CBOR.CBOR>([[0n, []], [1n, []], [2n, 170000n], [3n, ttl]]), new Map(), true, null]);
+  const payload = { x402Version: 2, accepted: required().accepts[0],
+    payload: { transaction: Buffer.from(bytes).toString("base64"), nonce: `${"ab".repeat(32)}#0` } };
+  return { headers: { "PAYMENT-SIGNATURE": encodePaymentSignatureHeader(payload) },
+    txHash: TransactionHash.toHex(TransactionBody.toHashFromBytes(Transaction.extractBodyBytes(bytes))) };
 }
 async function setup(verdict: "APPROVE" | "REFUSE" = "APPROVE", mutate?: (signed: SignedReceipt) => SignedReceipt, proposed = proposal) {
   const dir = await directory();
@@ -91,6 +102,7 @@ it("hires with the bundle and proposal, trusts APPROVE, pays once and writes a v
   const transcript = await run(s);
   expect(transcript.payment?.status).toBe("confirmed");
   expect(s.pay).toHaveBeenCalledTimes(1);
+  expect(s.pay).toHaveBeenCalledWith(proposal, "http://seller/api/market-data", { taskId, eventId, action: "pay" }, s.bundle.mandate.expiry);
   const args = s.cli.mock.calls[0][0];
   expect(args.slice(0, 6)).toEqual(["--preprod", "tasks", "create", "--personal", "--coworker-id", "coworker"]);
   expect(JSON.parse(args[args.indexOf("--description") + 1])).toEqual({ mandateBundle: s.bundle, proposal });
@@ -166,52 +178,56 @@ it("checks changed requirements before signing or sending payment", async () => 
   const dir = await directory();
   const sign = vi.fn(async () => ({ "PAYMENT-SIGNATURE": "signed" }));
   const fetchPaid = vi.fn(async () => response402({ ...proposal, requirements: { ...proposal.requirements, amount: "50000000" } }));
-  await expect(payApproved(proposal, "http://seller/api/market-data", { fetch: fetchPaid, createHeaders: sign, sleep: async () => {} },
-    new Journal(join(dir, "journal.json")), { taskId, eventId, action: "pay" })).rejects.toThrow("requirements changed");
+  await expect(payApproved(proposal, "http://seller/api/market-data", { fetch: fetchPaid, createHeaders: sign, sleep: async () => {}, lookupTransaction: async () => false },
+    new Journal(join(dir, "journal.json")), { taskId, eventId, action: "pay" }, Math.floor(Date.now() / 1000) + 3600)).rejects.toThrow("requirements changed");
   expect(sign).not.toHaveBeenCalled();
   expect(fetchPaid).toHaveBeenCalledTimes(1);
 });
-it("reuses the same signature after a transport failure and restart", async () => {
+it("reuses one signature through transport failures and resolves it on restart", async () => {
   const dir = await directory(); const path = join(dir, "journal.json");
-  const sign = vi.fn(async () => ({ "PAYMENT-SIGNATURE": "one-transaction" }));
+  let clock = Date.now(); const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
+  const expiry = Math.floor(clock / 1000) + 3600;
+  const signed = testPayment(); const sign = vi.fn(async () => signed.headers);
   const sent: string[] = [];
   let pending = true;
   const fetchPaid = async (_url: string, init?: RequestInit) => {
     const signature = new Headers(init?.headers).get("PAYMENT-SIGNATURE");
     if (!signature) return response402();
     sent.push(signature);
-    if (pending) throw new Error("transport lost after submit");
+    if (pending) { clock += 120_000; throw new Error("transport lost after submit"); }
     return new Response("{}", { headers: { "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({ success: true,
-      transaction: "ab".repeat(32), network: "cardano:preprod", extra: { status: "confirmed" } })).toString("base64") } });
+      transaction: signed.txHash, network: "cardano:preprod", extra: { status: "confirmed" } })).toString("base64") } });
   };
-  const deps = { fetch: fetchPaid, createHeaders: sign, sleep: async () => {} };
+  const deps = { fetch: fetchPaid, createHeaders: sign, sleep: async (ms: number) => { clock += ms; }, lookupTransaction: async () => !pending };
   const id = { taskId, eventId, action: "pay" as const };
-  await expect(payApproved(proposal, "http://seller/api/market-data", deps, new Journal(path), id)).rejects.toThrow();
-  pending = false;
-  await payApproved(proposal, "http://seller/api/market-data", deps, new Journal(path), id);
-  expect(sent).toEqual(["one-transaction", "one-transaction"]);
-  expect(sign).toHaveBeenCalledTimes(1);
+  try {
+    await expect(payApproved(proposal, "http://seller/api/market-data", deps, new Journal(path), id, expiry)).rejects.toThrow("not found on preprod");
+    pending = false;
+    await payApproved(proposal, "http://seller/api/market-data", deps, new Journal(path), id, expiry);
+    expect(sent).toEqual(Array(3).fill(signed.headers["PAYMENT-SIGNATURE"]));
+    expect(sign).toHaveBeenCalledTimes(1);
+  } finally { now.mockRestore(); }
 });
 it.each(["settle", "required"])("retries settlement_pending (%s header) with one signature", async (header) => {
   const dir = await directory();
-  const sign = vi.fn(async () => ({ "PAYMENT-SIGNATURE": "one-transaction" }));
+  const signed = testPayment(); const sign = vi.fn(async () => signed.headers);
   const sent: string[] = [];
   const fetchPaid = async (_url: string, init?: RequestInit) => {
     const signature = new Headers(init?.headers).get("PAYMENT-SIGNATURE");
     if (!signature) return response402();
     sent.push(signature);
     const settled = { success: sent.length > 1, errorReason: sent.length === 1 ? "settlement_pending" : undefined,
-      transaction: "ab".repeat(32), network: "cardano:preprod", extra: { status: sent.length === 1 ? "pending" : "confirmed" } };
+      transaction: signed.txHash, network: "cardano:preprod", extra: { status: sent.length === 1 ? "pending" : "confirmed" } };
     if (sent.length === 1 && header === "required") return new Response("{}", { status: 402, headers: {
       "PAYMENT-REQUIRED": Buffer.from(JSON.stringify({ ...required(), error: "settlement_pending" })).toString("base64") } });
     return new Response("{}", { status: sent.length === 1 ? 402 : 200,
       headers: { "PAYMENT-RESPONSE": Buffer.from(JSON.stringify(settled)).toString("base64") } });
   };
   const sleep = vi.fn(async () => {});
-  const payment = await payApproved(proposal, "http://seller/api/market-data", { fetch: fetchPaid, createHeaders: sign, sleep },
-    new Journal(join(dir, "journal.json")), { taskId, eventId, action: "pay" });
+  const payment = await payApproved(proposal, "http://seller/api/market-data", { fetch: fetchPaid, createHeaders: sign, sleep, lookupTransaction: async () => false },
+    new Journal(join(dir, "journal.json")), { taskId, eventId, action: "pay" }, Math.floor(Date.now() / 1000) + 3600);
   expect(payment.status).toBe("confirmed");
-  expect(sent).toEqual(["one-transaction", "one-transaction"]);
+  expect(sent).toEqual([signed.headers["PAYMENT-SIGNATURE"], signed.headers["PAYMENT-SIGNATURE"]]);
   expect(sign).toHaveBeenCalledTimes(1);
   expect(sleep).toHaveBeenCalledWith(3000);
 });
@@ -226,7 +242,8 @@ it("stops an interrupted signing attempt without signing or sending again", asyn
   await journal.set(id, { state: "signing" });
   const sign = vi.fn(async () => ({ "PAYMENT-SIGNATURE": "must-not-sign" }));
   const fetchPaid = vi.fn(async () => response402());
-  await expect(payApproved(proposal, "http://seller/api/market-data", { fetch: fetchPaid, createHeaders: sign, sleep: async () => {} }, journal, id))
+  await expect(payApproved(proposal, "http://seller/api/market-data", { fetch: fetchPaid, createHeaders: sign, sleep: async () => {}, lookupTransaction: async () => false },
+    journal, id, Math.floor(Date.now() / 1000) + 3600))
     .rejects.toThrow("signing was interrupted");
   expect(sign).not.toHaveBeenCalled(); expect(fetchPaid).not.toHaveBeenCalled();
 });
@@ -236,7 +253,8 @@ it("rejects a saved payment for a different endpoint before resending", async ()
   await journal.set(id, { state: "prepared", headers: { "PAYMENT-SIGNATURE": "old-signature" },
     endpoint: "http://seller/api/market-data", proposalDigest: proposalDigest(proposal) });
   const fetchPaid = vi.fn(async () => response402());
-  await expect(payApproved(proposal, "http://seller/other", { fetch: fetchPaid, createHeaders: async () => ({}), sleep: async () => {} }, journal, id))
+  await expect(payApproved(proposal, "http://seller/other", { fetch: fetchPaid, createHeaders: async () => ({}), sleep: async () => {}, lookupTransaction: async () => false },
+    journal, id, Math.floor(Date.now() / 1000) + 3600))
     .rejects.toThrow("saved payment does not match");
   expect(fetchPaid).not.toHaveBeenCalled();
 });
@@ -282,5 +300,46 @@ it("does not pay when completion arrives after the Task timeout", async () => {
   try {
     expect((await run(s)).steps.at(-1)?.text).toContain("Task timed out");
     expect(s.pay).not.toHaveBeenCalled();
+  } finally { now.mockRestore(); }
+});
+it.each(["normal", "recovery"])("writes the actual signed transaction hash into the %s transcript", async (mode) => {
+  const s = await setup(); const signed = testPayment();
+  const createHeaders = vi.fn(async () => signed.headers);
+  const fetchPayment = async (url: string, init?: RequestInit) => {
+    if (!init?.headers) return s.fetchPage(url);
+    if (mode === "recovery") return new Response("{}", { status: 402, headers: {
+      "PAYMENT-REQUIRED": Buffer.from(JSON.stringify({ ...required(), error: "invalid_exact_cardano_payload_nonce_not_on_chain" })).toString("base64") } });
+    return new Response("{}", { headers: { "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({ success: true,
+      transaction: signed.txHash, network: "cardano:preprod", extra: { status: "confirmed" } })).toString("base64") } });
+  };
+  const logs: string[] = [];
+  const transcript = await runOrchestrator({ scenario: "S1", offerUrl, mandateBundle: s.bundle, guardAddress, coworkerId: "coworker" }, {
+    fetch: fetchPayment, cli: s.cli, journal: s.journal, outputDir: s.dir, log: (line) => logs.push(line),
+    pay: (p, url, action, expiry) => payApproved(p, url, { fetch: fetchPayment, createHeaders,
+      sleep: async () => {}, lookupTransaction: async () => true }, s.journal, action, expiry),
+  });
+  expect(transcript.payment).toEqual({ txHash: signed.txHash, network: "cardano:preprod",
+    status: mode === "normal" ? "confirmed" : "confirmed-on-chain" });
+  expect(createHeaders).toHaveBeenCalledTimes(1);
+  const disk = JSON.parse(await readFile(join(s.dir, `${transcript.startedAt.replaceAll(":", "-")}-S1.json`), "utf8"));
+  expect(RunTranscriptSchema.parse(disk).payment?.txHash).toBe(signed.txHash);
+  if (mode === "recovery") expect(logs.some((line) => line.includes("paid (confirmed on chain; seller response not received)"))).toBe(true);
+});
+it("can resolve a settled prepared payment after the Mandate expires, without signing again", async () => {
+  const s = await setup(); const signed = testPayment();
+  const createHeaders = vi.fn(async () => signed.headers);
+  const requestKey = JSON.stringify(["S1", offerUrl, s.bundle.digest, proposalDigest(proposal)]);
+  await s.journal.setHire(requestKey, taskId);
+  await s.journal.set({ taskId, eventId, action: "pay" }, { state: "prepared", headers: signed.headers,
+    endpoint: "http://seller/api/market-data", proposalDigest: proposalDigest(proposal) });
+  const now = vi.spyOn(Date, "now").mockReturnValue((s.bundle.mandate.expiry + 1) * 1000);
+  try {
+    const transcript = await runOrchestrator({ scenario: "S1", offerUrl, mandateBundle: s.bundle, guardAddress, coworkerId: "coworker" }, {
+      fetch: s.fetchPage, cli: s.cli, journal: s.journal, outputDir: s.dir, log: () => {},
+      pay: (p, url, action, expiry) => payApproved(p, url, { fetch: s.fetchPage, createHeaders,
+        sleep: async () => {}, lookupTransaction: async () => true }, s.journal, action, expiry),
+    });
+    expect(transcript.payment).toMatchObject({ txHash: signed.txHash, status: "confirmed-on-chain" });
+    expect(createHeaders).not.toHaveBeenCalled();
   } finally { now.mockRestore(); }
 });

@@ -4,7 +4,7 @@ import { parseArgs, promisify } from "node:util";
 import { MandateBundleSchema, verifyMandate } from "../guard";
 import { isPreprodBech32Address } from "../guard/bech32";
 import { Journal } from "./journal";
-import { payApproved, walletHeaders } from "./payment";
+import { blockfrostLookup, payApproved, walletHeaders } from "./payment";
 import { runOrchestrator } from "./run";
 
 const exec = promisify(execFile);
@@ -22,7 +22,8 @@ try {
     mandateBundle: bundle, guardAddress: process.env.GUARD_ADDRESS!, coworkerId: process.env.SOKOSUMI_COWORKER_ID }, {
     fetch, journal, outputDir: "runs", log: console.log, sleep, recorded: true,
     cli: async (args, timeoutMs = 30_000) => (await exec("sokosumi", args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 })).stdout,
-    pay: (proposal, endpoint, id) => payApproved(proposal, endpoint, { fetch, createHeaders: walletHeaders(process.env), sleep }, journal, id),
+    pay: (proposal, endpoint, id, mandateExpiry) => payApproved(proposal, endpoint, { fetch,
+      createHeaders: walletHeaders(process.env), sleep, lookupTransaction: blockfrostLookup(process.env, fetch) }, journal, id, mandateExpiry),
   });
   if (!transcript.verdict || (transcript.verdict === "APPROVE" && !transcript.payment)) process.exitCode = 1;
 } catch {
